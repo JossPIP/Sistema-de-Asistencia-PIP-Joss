@@ -1,0 +1,99 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+    
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
+    }
+    
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+    
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function isValidStudent(data) {
+      let allowedFields = ['uid', 'dni', 'apellidoPaterno', 'apellidoMaterno', 'nombres', 'genero', 'celular', 'grado', 'seccion', 'avatarUrl', 'createdAt'];
+      return hasOnlyAllowedFields(allowedFields) &&
+             hasRequiredFields(['uid', 'dni', 'apellidoPaterno', 'apellidoMaterno', 'nombres', 'genero', 'celular', 'grado', 'seccion', 'createdAt']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 128 &&
+             data.dni is string && data.dni.size() > 0 && data.dni.size() < 20 &&
+             data.apellidoPaterno is string && data.apellidoPaterno.size() < 100 &&
+             data.apellidoMaterno is string && data.apellidoMaterno.size() < 100 &&
+             data.nombres is string && data.nombres.size() < 100 &&
+             data.genero is string && data.genero.size() < 20 &&
+             data.celular is string && data.celular.size() < 20 &&
+             data.grado is string && data.grado.size() < 50 &&
+             data.seccion is string && data.seccion.size() < 50 &&
+             (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() < 500)) &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidAttendanceLog(data) {
+      let allowedFields = ['uid', 'studentRef', 'studentName', 'studentDni', 'grado', 'seccion', 'avatarUrl', 'timestamp', 'type', 'status'];
+      return hasOnlyAllowedFields(allowedFields) &&
+             hasRequiredFields(['uid', 'studentRef', 'studentName', 'studentDni', 'timestamp', 'type', 'status']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 128 &&
+             data.studentRef is string && data.studentRef.size() > 0 && data.studentRef.size() < 128 &&
+             data.studentName is string && data.studentName.size() > 0 && data.studentName.size() < 200 &&
+             data.studentDni is string && data.studentDni.size() > 0 && data.studentDni.size() < 20 &&
+             (!('grado' in data) || (data.grado is string && data.grado.size() < 50)) &&
+             (!('seccion' in data) || (data.seccion is string && data.seccion.size() < 50)) &&
+             (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() < 500)) &&
+             data.timestamp is timestamp &&
+             data.type in ['entrada', 'salida'] &&
+             data.status in ['presente', 'tarde', 'ausente'];
+    }
+
+    function isValidSettings(data) {
+      let allowedFields = ['uid', 'whatsappApiKey', 'whatsappInstanceId', 'entryTemplate', 'exitTemplate'];
+      return hasOnlyAllowedFields(allowedFields) &&
+             hasRequiredFields(['uid']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 128 &&
+             (!('whatsappApiKey' in data) || (data.whatsappApiKey is string && data.whatsappApiKey.size() < 200)) &&
+             (!('whatsappInstanceId' in data) || (data.whatsappInstanceId is string && data.whatsappInstanceId.size() < 200)) &&
+             (!('entryTemplate' in data) || (data.entryTemplate is string && data.entryTemplate.size() < 1000)) &&
+             (!('exitTemplate' in data) || (data.exitTemplate is string && data.exitTemplate.size() < 1000));
+    }
+
+    match /students/{documentId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && isValidStudent(request.resource.data) && uidUnchanged();
+      allow update: if isDocOwner() && isValidStudent(request.resource.data) && uidNotModified() && areImmutableFieldsUnchanged(['createdAt']);
+      allow delete: if isDocOwner();
+    }
+
+    match /attendance/{documentId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && isValidAttendanceLog(request.resource.data) && uidUnchanged();
+      allow update: if isDocOwner() && isValidAttendanceLog(request.resource.data) && uidNotModified() && areImmutableFieldsUnchanged(['timestamp']);
+      allow delete: if isDocOwner();
+    }
+
+    match /settings/{documentId} {
+      allow read: if isAuthenticated() && request.auth.uid == documentId;
+      allow create: if isAuthenticated() && request.auth.uid == documentId && isValidSettings(request.resource.data) && uidUnchanged();
+      allow update: if isAuthenticated() && request.auth.uid == documentId && isValidSettings(request.resource.data) && uidNotModified();
+      allow delete: if isAuthenticated() && request.auth.uid == documentId;
+    }
+  }
+}

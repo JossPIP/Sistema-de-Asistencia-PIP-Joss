@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary-fixed-dim: #adc7ff;
+  --color-tertiary: #9e4300;
+  --color-secondary: #475e8c;
+  --color-on-background: #191c1d;
+  --color-on-tertiary-fixed-variant: #783100;
+  --color-on-secondary-fixed: #001a41;
+  --color-primary: #005bbf;
+  --color-tertiary-fixed-dim: #ffb691;
+  --color-on-error: #ffffff;
+  --color-surface-container-lowest: #ffffff;
+  --color-inverse-surface: #2e3132;
+  --color-on-surface-variant: #414754;
+  --color-error: #ba1a1a;
+  --color-background: #f8f9fa;
+  --color-tertiary-container: #c55500;
+  --color-secondary-container: #b2c9fe;
+  --color-surface-tint: #005bc0;
+  --color-on-primary: #ffffff;
+  --color-surface-variant: #e1e3e4;
+  --color-outline-variant: #c1c6d6;
+  --color-primary-fixed: #d8e2ff;
+  --color-on-secondary-container: #3d5481;
+  --color-on-primary-container: #ffffff;
+  --color-surface-container: #edeeef;
+  --color-on-error-container: #93000a;
+  --color-outline: #727785;
+  --color-inverse-on-surface: #f0f1f2;
+  --color-secondary-fixed: #d8e2ff;
+  --color-on-surface: #191c1d;
+  --color-on-tertiary: #ffffff;
+  --color-surface-dim: #d9dadb;
+  --color-surface-bright: #f8f9fa;
+  --color-on-secondary-fixed-variant: #2e4673;
+  --color-on-tertiary-container: #0e0200;
+  --color-on-primary-fixed-variant: #004493;
+  --color-secondary-fixed-dim: #afc7fb;
+  --color-surface-container-low: #f3f4f5;
+  --color-on-primary-fixed: #001a41;
+  --color-surface-container-highest: #e1e3e4;
+  --color-surface: #f8f9fa;
+  --color-inverse-primary: #adc7ff;
+  --color-surface-container-high: #e7e8e9;
+  --color-on-tertiary-fixed: #341100;
+  --color-error-container: #ffdad6;
+  --color-tertiary-fixed: #ffdbcb;
+  --color-on-secondary: #ffffff;
+  --color-primary-container: #1a73e8;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  --radius-DEFAULT: 0.5rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+  --radius-full: 9999px;
+}
+
+@layer base {
+  body {
+    @apply bg-surface text-on-surface font-sans antialiased;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    background: rgba(248, 249, 250, 0.8);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  
+  .ambient-shadow {
+    box-shadow: 0 12px 32px rgba(25, 28, 29, 0.06);
+  }
+  
+  .cta-gradient {
+    background: linear-gradient(135deg, #005bbf 0%, #1a73e8 100%);
+  }
+
+  .toggle-checkbox:checked {
+    right: 0;
+    border-color: #005bbf;
+  }
+  .toggle-checkbox:checked + .toggle-label {
+    background-color: #d8e2ff;
+  }
+
+  .scanner-frame {
+    position: relative;
+    background: linear-gradient(to right, #005bbf 4px, transparent 4px) 0 0,
+                linear-gradient(to right, #005bbf 4px, transparent 4px) 0 100%,
+                linear-gradient(to left, #005bbf 4px, transparent 4px) 100% 0,
+                linear-gradient(to left, #005bbf 4px, transparent 4px) 100% 100%,
+                linear-gradient(to bottom, #005bbf 4px, transparent 4px) 0 0,
+                linear-gradient(to bottom, #005bbf 4px, transparent 4px) 100% 0,
+                linear-gradient(to top, #005bbf 4px, transparent 4px) 0 100%,
+                linear-gradient(to top, #005bbf 4px, transparent 4px) 100% 100%;
+    background-repeat: no-repeat;
+    background-size: 40px 40px;
+  }
+  .scan-line {
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #1a73e8, transparent);
+    width: 100%;
+    position: absolute;
+    top: 0;
+    animation: scan 3s linear infinite;
+  }
+  @keyframes scan {
+    0% { top: 0%; }
+    50% { top: 100%; }
+    100% { top: 0%; }
+  }
+}

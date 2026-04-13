@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "Student": {
+      "title": "Estudiante",
+      "description": "Un estudiante registrado en la institución.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "dni": { "type": "string" },
+        "apellidoPaterno": { "type": "string" },
+        "apellidoMaterno": { "type": "string" },
+        "nombres": { "type": "string" },
+        "genero": { "type": "string" },
+        "celular": { "type": "string" },
+        "grado": { "type": "string" },
+        "seccion": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "dni", "apellidoPaterno", "apellidoMaterno", "nombres", "genero", "celular", "grado", "seccion", "createdAt"]
+    },
+    "AttendanceLog": {
+      "title": "Registro de Asistencia",
+      "description": "Un registro de entrada o salida de un estudiante.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "studentRef": { "type": "string" },
+        "studentName": { "type": "string" },
+        "studentDni": { "type": "string" },
+        "grado": { "type": "string" },
+        "seccion": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "type": { "type": "string", "enum": ["entrada", "salida"] },
+        "status": { "type": "string", "enum": ["presente", "tarde", "ausente"] }
+      },
+      "required": ["uid", "studentRef", "studentName", "studentDni", "timestamp", "type", "status"]
+    },
+    "Settings": {
+      "title": "Ajustes",
+      "description": "Configuración de la aplicación.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "whatsappApiKey": { "type": "string" },
+        "whatsappInstanceId": { "type": "string" },
+        "entryTemplate": { "type": "string" },
+        "exitTemplate": { "type": "string" }
+      },
+      "required": ["uid"]
+    }
+  },
+  "firestore": {
+    "/students/{documentId}": { "schema": "Student", "description": "Colección de estudiantes." },
+    "/attendance/{documentId}": { "schema": "AttendanceLog", "description": "Colección de registros de asistencia." },
+    "/settings/{documentId}": { "schema": "Settings", "description": "Colección de ajustes." }
+  }
+}

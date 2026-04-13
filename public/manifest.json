@@ -1,0 +1,22 @@
+{
+  "name": "The Digital Registrar",
+  "short_name": "Registrar",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8f9fa",
+  "theme_color": "#005bbf",
+  "icons": [
+    {
+      "src": "https://api.dicebear.com/7.x/initials/svg?seed=DR&backgroundColor=005bbf&textColor=ffffff",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://api.dicebear.com/7.x/initials/svg?seed=DR&backgroundColor=005bbf&textColor=ffffff",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
