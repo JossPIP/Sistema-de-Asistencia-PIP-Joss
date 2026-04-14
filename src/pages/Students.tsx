@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, query, onSnapshot, addDoc, serverTimestamp, writeBatch, doc } from 'firebase/firestore';
+import { collection, query, onSnapshot, addDoc, serverTimestamp, writeBatch, doc, deleteDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import * as XLSX from 'xlsx';
 
@@ -8,6 +8,7 @@ export default function Students() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [newStudent, setNewStudent] = useState({
@@ -27,7 +28,7 @@ export default function Students() {
     
     const q = query(collection(db, 'students'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const studentData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+      const studentData = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
       // Filtrar localmente por el usuario actual (o se podría hacer en la query)
       const myStudents = studentData.filter(s => s.uid === auth.currentUser?.uid);
       setStudents(myStudents);
@@ -149,6 +150,53 @@ export default function Students() {
     XLSX.writeFile(wb, "Reporte_Estudiantes.xlsx");
   };
 
+  const handleDeleteSelected = async () => {
+    if (selectedStudents.size === 0) return;
+    if (!window.confirm(`¿Estás seguro de eliminar ${selectedStudents.size} estudiante(s)?`)) return;
+
+    try {
+      let batch = writeBatch(db);
+      let count = 0;
+
+      for (const id of selectedStudents) {
+        batch.delete(doc(db, 'students', id));
+        count++;
+        if (count === 400) {
+          await batch.commit();
+          batch = writeBatch(db);
+          count = 0;
+        }
+      }
+      
+      if (count > 0) {
+        await batch.commit();
+      }
+      
+      setSelectedStudents(new Set());
+      alert("Estudiantes eliminados correctamente.");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'students');
+    }
+  };
+
+  const toggleStudentSelection = (id: string) => {
+    const newSelection = new Set(selectedStudents);
+    if (newSelection.has(id)) {
+      newSelection.delete(id);
+    } else {
+      newSelection.add(id);
+    }
+    setSelectedStudents(newSelection);
+  };
+
+  const toggleAllSelection = () => {
+    if (selectedStudents.size === filteredStudents.length && filteredStudents.length > 0) {
+      setSelectedStudents(new Set());
+    } else {
+      setSelectedStudents(new Set(filteredStudents.map(s => s.id)));
+    }
+  };
+
   const filteredStudents = students.filter(s => 
     s.nombres.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.apellidoPaterno.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -233,19 +281,38 @@ export default function Students() {
               className="w-full bg-surface-container-high border-0 rounded-full pl-12 pr-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
             />
           </div>
-          <button 
-            onClick={handleDownloadReport}
-            className="px-4 py-2 bg-surface-container-high text-on-surface font-semibold rounded-full text-sm hover:bg-surface-variant transition-colors flex items-center gap-2 whitespace-nowrap"
-          >
-            <span className="material-symbols-outlined text-sm">description</span>
-            Descargar Reporte
-          </button>
+          <div className="flex gap-2">
+            {selectedStudents.size > 0 && (
+              <button 
+                onClick={handleDeleteSelected}
+                className="px-4 py-2 bg-error-container text-on-error-container font-semibold rounded-full text-sm hover:brightness-95 transition-colors flex items-center gap-2 whitespace-nowrap"
+              >
+                <span className="material-symbols-outlined text-sm">delete</span>
+                Eliminar ({selectedStudents.size})
+              </button>
+            )}
+            <button 
+              onClick={handleDownloadReport}
+              className="px-4 py-2 bg-surface-container-high text-on-surface font-semibold rounded-full text-sm hover:bg-surface-variant transition-colors flex items-center gap-2 whitespace-nowrap"
+            >
+              <span className="material-symbols-outlined text-sm">description</span>
+              Descargar
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-auto">
           <div className="min-w-[800px]">
-            <div className="grid grid-cols-12 px-6 py-4 bg-surface-container-low/50 text-xs font-bold uppercase tracking-widest text-on-surface-variant sticky top-0 z-10 backdrop-blur-md">
-              <div className="col-span-4">Estudiante</div>
+            <div className="grid grid-cols-12 px-6 py-4 bg-surface-container-low/50 text-xs font-bold uppercase tracking-widest text-on-surface-variant sticky top-0 z-10 backdrop-blur-md items-center">
+              <div className="col-span-1 flex justify-center">
+                <input 
+                  type="checkbox" 
+                  checked={selectedStudents.size === filteredStudents.length && filteredStudents.length > 0}
+                  onChange={toggleAllSelection}
+                  className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer"
+                />
+              </div>
+              <div className="col-span-3">Estudiante</div>
               <div className="col-span-2">DNI</div>
               <div className="col-span-3">Grado / Sección</div>
               <div className="col-span-3 text-right">Contacto</div>
@@ -258,8 +325,16 @@ export default function Students() {
                 </div>
               ) : (
                 filteredStudents.map((student) => (
-                  <div key={student.id} className="grid grid-cols-12 items-center px-6 py-4 hover:bg-surface-container-high/20 transition-colors group">
-                    <div className="col-span-4 flex items-center gap-4">
+                  <div key={student.id} className={`grid grid-cols-12 items-center px-6 py-4 hover:bg-surface-container-high/20 transition-colors group ${selectedStudents.has(student.id) ? 'bg-primary/5' : ''}`}>
+                    <div className="col-span-1 flex justify-center">
+                      <input 
+                        type="checkbox" 
+                        checked={selectedStudents.has(student.id)}
+                        onChange={() => toggleStudentSelection(student.id)}
+                        className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer"
+                      />
+                    </div>
+                    <div className="col-span-3 flex items-center gap-4">
                       <div className="w-10 h-10 rounded-full bg-secondary-container overflow-hidden shrink-0">
                         <img src={student.avatarUrl} alt={student.nombres} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                       </div>

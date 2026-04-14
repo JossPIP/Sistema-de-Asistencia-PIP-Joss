@@ -17,7 +17,7 @@ export default function Settings() {
     try {
       const querySnapshot = await getDocs(collection(db, 'users'));
       const teacherData = querySnapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
         .filter((user: any) => user.role === 'teacher');
       setTeachers(teacherData);
     } catch (error) {

@@ -6,6 +6,7 @@ import { auth, loginWithCredentials, db } from './firebase';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Navigation, TopBar } from './components/Navigation';
 import Dashboard from './pages/Dashboard';
+import Reports from './pages/Reports';
 import Scanner from './pages/Scanner';
 import Students from './pages/Students';
 import Settings from './pages/Settings';
@@ -29,7 +30,7 @@ export default function App() {
         unsubscribeDoc = onSnapshot(doc(db, 'users', currentUser.uid), (userDoc) => {
           if (userDoc.exists()) {
             setUserRole(userDoc.data().role);
-            setIsLoggingIn(false); // Reset login state on success
+            setIsLoggingIn(false);
           } else {
             setUserRole(null);
           }
@@ -42,7 +43,7 @@ export default function App() {
       } else {
         setUserRole(null);
         setLoading(false);
-        setIsLoggingIn(false); // Reset login state on logout
+        setIsLoggingIn(false);
         if (unsubscribeDoc) unsubscribeDoc();
       }
     });
@@ -70,8 +71,6 @@ export default function App() {
     }
   };
 
-  // If we finished loading the document and the user has no role, and we are not actively logging in,
-  // it means the user is invalid or the document was deleted. We should log them out.
   useEffect(() => {
     if (!loading && user && !userRole && !isLoggingIn) {
       console.warn("User has no role document, signing out.");
@@ -84,7 +83,7 @@ export default function App() {
       <div className="min-h-screen flex items-center justify-center bg-surface">
         <div className="animate-pulse flex flex-col items-center">
           <span className="material-symbols-outlined text-primary text-4xl mb-4">account_balance</span>
-          <p className="text-on-surface-variant font-medium">Cargando El Registrador Digital...</p>
+          <p className="text-on-surface-variant font-medium">Cargando Sistema de Asistencia - JCMS...</p>
         </div>
       </div>
     );
@@ -93,10 +92,20 @@ export default function App() {
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-surface p-6">
-        <div className="bg-surface-container-lowest p-8 rounded-3xl shadow-lg max-w-md w-full text-center">
-          <span className="material-symbols-outlined text-primary text-6xl mb-6">account_balance</span>
-          <h1 className="text-2xl font-bold text-on-surface mb-2">El Registrador Digital</h1>
-          <p className="text-on-surface-variant mb-8">Inicia sesión para gestionar los registros.</p>
+        <div className="bg-surface-container-lowest p-8 rounded-3xl shadow-lg max-w-md w-full text-center border border-outline-variant/20">
+          <div className="mb-6">
+            <h2 className="text-lg font-bold text-on-surface uppercase tracking-wide">IE 51027 Juan de la Cruz Montes Salas</h2>
+            <p className="text-sm text-on-surface-variant font-medium">Inicial - Primaria - Secundaria</p>
+          </div>
+          
+          {/* Logo Placeholder */}
+          <div className="w-24 h-24 mx-auto mb-6 bg-surface-container-highest rounded-full flex items-center justify-center border-4 border-surface overflow-hidden shadow-sm">
+            {/* Reemplaza este span con tu etiqueta <img> cuando tengas el logo */}
+            <span className="material-symbols-outlined text-primary text-5xl">school</span>
+          </div>
+          
+          <h1 className="text-2xl font-extrabold text-primary mb-2">Sistema de Asistencia - JCMS</h1>
+          <p className="text-on-surface-variant mb-8 text-sm">Inicia sesión para gestionar los registros.</p>
           
           <form onSubmit={handleLogin} className="space-y-4 text-left">
             <div>
@@ -131,7 +140,7 @@ export default function App() {
             <button
               type="submit"
               disabled={isLoggingIn}
-              className="w-full py-4 mt-4 cta-gradient text-on-primary rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-70"
+              className="w-full py-4 mt-4 cta-gradient text-on-primary rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-70 shadow-md"
             >
               <span className="material-symbols-outlined">login</span>
               {isLoggingIn ? 'Iniciando...' : 'Iniciar Sesión'}
@@ -152,6 +161,7 @@ export default function App() {
               {userRole === 'admin' ? (
                 <>
                   <Route path="/" element={<Dashboard />} />
+                  <Route path="/reports" element={<Reports />} />
                   <Route path="/scanner" element={<Scanner />} />
                   <Route path="/students" element={<Students />} />
                   <Route path="/settings" element={<Settings />} />

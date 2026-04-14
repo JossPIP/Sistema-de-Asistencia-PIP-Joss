@@ -5,7 +5,8 @@ import { cn } from '../lib/utils';
 export function Navigation({ userRole }: { userRole?: string | null }) {
   return (
     <nav className="fixed bottom-0 left-0 w-full glass-panel z-50 rounded-t-2xl shadow-[0_-4px_24px_rgba(25,28,29,0.04)] border-t border-outline-variant/20 flex justify-around items-center px-4 pb-4 pt-2 md:hidden">
-      {userRole === 'admin' && <NavItem to="/" icon="dashboard" label="Panel" />}
+      {userRole === 'admin' && <NavItem to="/" icon="dashboard" label="Dashboard" />}
+      {userRole === 'admin' && <NavItem to="/reports" icon="list_alt" label="Reportes" />}
       <NavItem to="/scanner" icon="qr_code_scanner" label="Escáner" />
       {userRole === 'admin' && <NavItem to="/students" icon="group" label="Estudiantes" />}
       {userRole === 'admin' && <NavItem to="/settings" icon="settings" label="Ajustes" />}
@@ -47,12 +48,13 @@ export function TopBar({ userRole }: { userRole?: string | null }) {
   return (
     <header className="w-full top-0 sticky z-40 bg-surface/90 backdrop-blur-md flex justify-between items-center px-6 py-4 border-b border-outline-variant/10">
       <div className="flex items-center gap-3">
-        <span className="material-symbols-outlined text-primary text-2xl">account_balance</span>
-        <h1 className="text-xl font-bold text-on-surface tracking-tight">El Registrador Digital</h1>
+        <span className="material-symbols-outlined text-primary text-2xl">school</span>
+        <h1 className="text-xl font-bold text-on-surface tracking-tight">Sistema de Asistencia - JCMS</h1>
       </div>
       <div className="flex items-center gap-4">
         <div className="hidden md:flex items-center space-x-6 mr-6">
-          {userRole === 'admin' && <DesktopNavLink to="/" label="Panel" />}
+          {userRole === 'admin' && <DesktopNavLink to="/" label="Dashboard" />}
+          {userRole === 'admin' && <DesktopNavLink to="/reports" label="Reportes" />}
           <DesktopNavLink to="/scanner" label="Escáner" />
           {userRole === 'admin' && <DesktopNavLink to="/students" label="Estudiantes" />}
           {userRole === 'admin' && <DesktopNavLink to="/settings" label="Ajustes" />}
