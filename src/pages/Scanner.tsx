@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 export default function Scanner() {
   const [scanMode, setScanMode] = useState<'entrada' | 'salida'>('entrada');
@@ -30,6 +31,27 @@ export default function Scanner() {
     };
   }, [isScanning, scanMode]);
 
+  const sendWhatsAppMessage = async (studentData: any, mode: 'entrada' | 'salida') => {
+    if (!studentData.callMeBotApiKey || !studentData.celular) {
+      console.log("WhatsApp no configurado para este estudiante.");
+      return;
+    }
+
+    const timeString = format(new Date(), 'hh:mm a');
+    const studentName = `${studentData.nombres} ${studentData.apellidoPaterno} ${studentData.apellidoMaterno}`;
+    const message = mode === 'entrada' 
+      ? `Hola, ${studentName} ha ingresado a la escuela exitosamente a las ${timeString}.`
+      : `Aviso: ${studentName} ha salido de las instalaciones escolares a las ${timeString}.`;
+
+    try {
+      const url = `https://api.callmebot.com/whatsapp.php?phone=${studentData.celular}&text=${encodeURIComponent(message)}&apikey=${studentData.callMeBotApiKey}`;
+      await fetch(url, { mode: 'no-cors' });
+      console.log("WhatsApp message request sent");
+    } catch (error) {
+      console.error("Error sending WhatsApp message:", error);
+    }
+  };
+
   const onScanSuccess = async (decodedText: string) => {
     if (!auth.currentUser) return;
     
@@ -44,7 +66,7 @@ export default function Scanner() {
 
     try {
       // Find student by DNI
-      const q = query(collection(db, 'students'), where('dni', '==', decodedText), where('uid', '==', auth.currentUser.uid));
+      const q = query(collection(db, 'students'), where('dni', '==', decodedText));
       const querySnapshot = await getDocs(q);
 
       if (querySnapshot.empty) {
@@ -79,8 +101,8 @@ export default function Scanner() {
         status: status
       });
 
-      // Simulate WhatsApp Notification
-      console.log(`[WhatsApp Gateway Simulado] Enviado a ${studentData.celular}: Su hijo(a) ${studentData.nombres} ha registrado su ${scanMode}.`);
+      // Intentar enviar WhatsApp
+      await sendWhatsAppMessage(studentData, scanMode);
 
       setLastScan({
         ...studentData,
@@ -171,11 +193,17 @@ export default function Scanner() {
       )}
 
       <div className="relative z-10 mt-8 w-full max-w-md flex flex-col items-center gap-4">
-        <button className="w-full bg-surface-container-lowest/10 hover:bg-surface-container-lowest/20 backdrop-blur-md text-white py-4 rounded-xl border border-white/20 flex items-center justify-center gap-3 transition-all active:scale-95">
-          <span className="material-symbols-outlined">keyboard</span>
-          <span className="font-semibold">Entrada Manual</span>
-        </button>
-        <p className="text-white/60 text-xs text-center px-8">Alinea el código QR del estudiante dentro del marco para registrar la asistencia automáticamente.</p>
+        <div className="bg-surface-container-lowest/10 backdrop-blur-md text-white p-4 rounded-xl border border-white/20 w-full">
+          <h4 className="font-bold text-sm mb-2 flex items-center gap-1">
+            <span className="material-symbols-outlined text-sm">info</span>
+            Instrucciones para Códigos QR
+          </h4>
+          <ul className="text-xs text-white/80 space-y-1 list-disc list-inside">
+            <li>El código QR debe contener <strong>únicamente el DNI</strong> del estudiante.</li>
+            <li>Asegúrate de que el DNI coincida con el registrado en el sistema.</li>
+            <li>Alinea el código QR dentro del marco para registrar la asistencia.</li>
+          </ul>
+        </div>
       </div>
     </div>
   );

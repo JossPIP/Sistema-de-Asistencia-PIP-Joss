@@ -1,5 +1,17 @@
 {
   "entities": {
+    "User": {
+      "title": "Usuario",
+      "description": "Usuario del sistema (Admin o Profesor)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "teacher"] },
+        "name": { "type": "string" },
+        "username": { "type": "string" }
+      },
+      "required": ["uid", "role", "username"]
+    },
     "Student": {
       "title": "Estudiante",
       "description": "Un estudiante registrado en la institución.",
@@ -14,6 +26,7 @@
         "celular": { "type": "string" },
         "grado": { "type": "string" },
         "seccion": { "type": "string" },
+        "callMeBotApiKey": { "type": "string" },
         "avatarUrl": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
@@ -36,24 +49,11 @@
         "status": { "type": "string", "enum": ["presente", "tarde", "ausente"] }
       },
       "required": ["uid", "studentRef", "studentName", "studentDni", "timestamp", "type", "status"]
-    },
-    "Settings": {
-      "title": "Ajustes",
-      "description": "Configuración de la aplicación.",
-      "type": "object",
-      "properties": {
-        "uid": { "type": "string" },
-        "whatsappApiKey": { "type": "string" },
-        "whatsappInstanceId": { "type": "string" },
-        "entryTemplate": { "type": "string" },
-        "exitTemplate": { "type": "string" }
-      },
-      "required": ["uid"]
     }
   },
   "firestore": {
+    "/users/{documentId}": { "schema": "User", "description": "Colección de usuarios y roles." },
     "/students/{documentId}": { "schema": "Student", "description": "Colección de estudiantes." },
-    "/attendance/{documentId}": { "schema": "AttendanceLog", "description": "Colección de registros de asistencia." },
-    "/settings/{documentId}": { "schema": "Settings", "description": "Colección de ajustes." }
+    "/attendance/{documentId}": { "schema": "AttendanceLog", "description": "Colección de registros de asistencia." }
   }
 }

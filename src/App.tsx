@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth, loginWithCredentials } from './firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { auth, loginWithCredentials, db } from './firebase';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Navigation, TopBar } from './components/Navigation';
 import Dashboard from './pages/Dashboard';
@@ -10,7 +11,8 @@ import Students from './pages/Students';
 import Settings from './pages/Settings';
 
 export default function App() {
-  const [user, setUser] = useState(auth.currentUser);
+  const [user, setUser] = useState<any>(auth.currentUser);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   
   const [username, setUsername] = useState('');
@@ -19,11 +21,36 @@ export default function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    let unsubscribeDoc: (() => void) | undefined;
+    
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      setLoading(false);
+      if (currentUser) {
+        unsubscribeDoc = onSnapshot(doc(db, 'users', currentUser.uid), (userDoc) => {
+          if (userDoc.exists()) {
+            setUserRole(userDoc.data().role);
+            setIsLoggingIn(false); // Reset login state on success
+          } else {
+            setUserRole(null);
+          }
+          setLoading(false);
+        }, (error) => {
+          console.error("Error fetching user role:", error);
+          setLoading(false);
+          setIsLoggingIn(false);
+        });
+      } else {
+        setUserRole(null);
+        setLoading(false);
+        setIsLoggingIn(false); // Reset login state on logout
+        if (unsubscribeDoc) unsubscribeDoc();
+      }
     });
-    return () => unsubscribe();
+    
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeDoc) unsubscribeDoc();
+    };
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -39,12 +66,20 @@ export default function App() {
       } else {
         setLoginError('Usuario o contraseña incorrectos.');
       }
-    } finally {
       setIsLoggingIn(false);
     }
   };
 
-  if (loading) {
+  // If we finished loading the document and the user has no role, and we are not actively logging in,
+  // it means the user is invalid or the document was deleted. We should log them out.
+  useEffect(() => {
+    if (!loading && user && !userRole && !isLoggingIn) {
+      console.warn("User has no role document, signing out.");
+      signOut(auth);
+    }
+  }, [loading, user, userRole, isLoggingIn]);
+
+  if (loading || (user && !userRole)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-surface">
         <div className="animate-pulse flex flex-col items-center">
@@ -111,17 +146,26 @@ export default function App() {
     <ErrorBoundary>
       <BrowserRouter>
         <div className="min-h-screen bg-background text-on-surface pb-24 md:pb-0">
-          <TopBar />
+          <TopBar userRole={userRole} />
           <main className="max-w-7xl mx-auto">
             <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/scanner" element={<Scanner />} />
-              <Route path="/students" element={<Students />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              {userRole === 'admin' ? (
+                <>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/scanner" element={<Scanner />} />
+                  <Route path="/students" element={<Students />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </>
+              ) : (
+                <>
+                  <Route path="/scanner" element={<Scanner />} />
+                  <Route path="*" element={<Navigate to="/scanner" replace />} />
+                </>
+              )}
             </Routes>
           </main>
-          <Navigation />
+          <Navigation userRole={userRole} />
         </div>
       </BrowserRouter>
     </ErrorBoundary>

@@ -31,8 +31,18 @@ service cloud.firestore {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
     }
 
+    function isValidUser(data) {
+      let allowedFields = ['uid', 'role', 'name', 'username'];
+      return hasOnlyAllowedFields(allowedFields) &&
+             hasRequiredFields(['uid', 'role', 'username']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 128 &&
+             data.role in ['admin', 'teacher'] &&
+             data.username is string && data.username.size() > 0 && data.username.size() < 100 &&
+             (!('name' in data) || (data.name is string && data.name.size() < 100));
+    }
+
     function isValidStudent(data) {
-      let allowedFields = ['uid', 'dni', 'apellidoPaterno', 'apellidoMaterno', 'nombres', 'genero', 'celular', 'grado', 'seccion', 'avatarUrl', 'createdAt'];
+      let allowedFields = ['uid', 'dni', 'apellidoPaterno', 'apellidoMaterno', 'nombres', 'genero', 'celular', 'grado', 'seccion', 'callMeBotApiKey', 'avatarUrl', 'createdAt'];
       return hasOnlyAllowedFields(allowedFields) &&
              hasRequiredFields(['uid', 'dni', 'apellidoPaterno', 'apellidoMaterno', 'nombres', 'genero', 'celular', 'grado', 'seccion', 'createdAt']) &&
              data.uid is string && data.uid.size() > 0 && data.uid.size() < 128 &&
@@ -44,6 +54,7 @@ service cloud.firestore {
              data.celular is string && data.celular.size() < 20 &&
              data.grado is string && data.grado.size() < 50 &&
              data.seccion is string && data.seccion.size() < 50 &&
+             (!('callMeBotApiKey' in data) || (data.callMeBotApiKey is string && data.callMeBotApiKey.size() < 200)) &&
              (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() < 500)) &&
              data.createdAt is timestamp;
     }
@@ -75,25 +86,25 @@ service cloud.firestore {
              (!('exitTemplate' in data) || (data.exitTemplate is string && data.exitTemplate.size() < 1000));
     }
 
+    match /users/{documentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && uidUnchanged();
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && uidNotModified();
+      allow delete: if isAuthenticated();
+    }
+
     match /students/{documentId} {
-      allow read: if isDocOwner();
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isValidStudent(request.resource.data) && uidUnchanged();
-      allow update: if isDocOwner() && isValidStudent(request.resource.data) && uidNotModified() && areImmutableFieldsUnchanged(['createdAt']);
-      allow delete: if isDocOwner();
+      allow update: if isAuthenticated() && isValidStudent(request.resource.data) && uidNotModified() && areImmutableFieldsUnchanged(['createdAt']);
+      allow delete: if isAuthenticated();
     }
 
     match /attendance/{documentId} {
-      allow read: if isDocOwner();
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isValidAttendanceLog(request.resource.data) && uidUnchanged();
-      allow update: if isDocOwner() && isValidAttendanceLog(request.resource.data) && uidNotModified() && areImmutableFieldsUnchanged(['timestamp']);
-      allow delete: if isDocOwner();
-    }
-
-    match /settings/{documentId} {
-      allow read: if isAuthenticated() && request.auth.uid == documentId;
-      allow create: if isAuthenticated() && request.auth.uid == documentId && isValidSettings(request.resource.data) && uidUnchanged();
-      allow update: if isAuthenticated() && request.auth.uid == documentId && isValidSettings(request.resource.data) && uidNotModified();
-      allow delete: if isAuthenticated() && request.auth.uid == documentId;
+      allow update: if isAuthenticated() && isValidAttendanceLog(request.resource.data) && uidNotModified() && areImmutableFieldsUnchanged(['timestamp']);
+      allow delete: if isAuthenticated();
     }
   }
 }

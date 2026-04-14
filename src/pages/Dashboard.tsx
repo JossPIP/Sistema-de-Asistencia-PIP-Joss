@@ -1,186 +1,236 @@
-import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { collection, query, orderBy, limit, onSnapshot, where } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../firebase';
+import React, { useState, useEffect } from 'react';
+import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import * as XLSX from 'xlsx';
 
 export default function Dashboard() {
-  const [recentLogs, setRecentLogs] = useState<any[]>([]);
-  const [stats, setStats] = useState({ present: 0, absent: 0, total: 0 });
+  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [grado, setGrado] = useState('');
+  const [seccion, setSeccion] = useState('');
+  const [reportData, setReportData] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [gradosOptions, setGradosOptions] = useState<string[]>([]);
+  const [seccionesOptions, setSeccionesOptions] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!auth.currentUser) return;
-
-    // Listen to recent attendance logs
-    const logsQuery = query(
-      collection(db, 'attendance'),
-      where('uid', '==', auth.currentUser.uid),
-      orderBy('timestamp', 'desc'),
-      limit(5)
-    );
-
-    const unsubscribeLogs = onSnapshot(logsQuery, (snapshot) => {
-      const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setRecentLogs(logs);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'attendance');
-    });
-
-    // En una app real, aquí se calcularían las estadísticas del día
-    // Por ahora lo inicializamos en 0 al estar limpia la base de datos
-    setStats({ present: 0, absent: 0, total: 0 });
-
-    return () => unsubscribeLogs();
+    fetchFilterOptions();
   }, []);
 
-  const attendancePercentage = stats.total > 0 ? ((stats.present / stats.total) * 100).toFixed(1) : '0.0';
+  const fetchFilterOptions = async () => {
+    try {
+      const q = query(collection(db, 'students'));
+      const querySnapshot = await getDocs(q);
+      const grados = new Set<string>();
+      const secciones = new Set<string>();
+      
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.grado) grados.add(data.grado);
+        if (data.seccion) secciones.add(data.seccion);
+      });
+      
+      setGradosOptions(Array.from(grados).sort());
+      setSeccionesOptions(Array.from(secciones).sort());
+    } catch (error) {
+      console.error("Error fetching filter options:", error);
+    }
+  };
+
+  const generateReport = async () => {
+    setIsLoading(true);
+    try {
+      // Start and end of the selected day
+      const startDate = new Date(date);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(date);
+      endDate.setHours(23, 59, 59, 999);
+
+      let q = query(
+        collection(db, 'attendance'),
+        where('timestamp', '>=', startDate),
+        where('timestamp', '<=', endDate),
+        orderBy('timestamp', 'desc')
+      );
+
+      const querySnapshot = await getDocs(q);
+      let logs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+
+      // Filter by grado and seccion if selected
+      if (grado) {
+        logs = logs.filter(log => log.grado === grado);
+      }
+      if (seccion) {
+        logs = logs.filter(log => log.seccion === seccion);
+      }
+
+      setReportData(logs);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, 'attendance');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const downloadExcel = () => {
+    if (reportData.length === 0) return;
+
+    const dataToExport = reportData.map(log => ({
+      'Fecha': format(log.timestamp.toDate(), 'dd/MM/yyyy'),
+      'Hora': format(log.timestamp.toDate(), 'HH:mm:ss'),
+      'Estudiante': log.studentName,
+      'DNI': log.studentDni,
+      'Grado': log.grado || '-',
+      'Sección': log.seccion || '-',
+      'Tipo': log.type === 'entrada' ? 'Entrada' : 'Salida',
+      'Estado': log.status
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Asistencia");
+    XLSX.writeFile(wb, `Reporte_Asistencia_${date}.xlsx`);
+  };
 
   return (
-    <div className="px-6 pt-8 space-y-8">
-      <section>
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
+    <div className="px-6 py-8 space-y-8 max-w-7xl mx-auto">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-extrabold tracking-tight text-on-surface mb-2">Panel de Control</h1>
+          <p className="text-on-surface-variant text-lg">Genera reportes de asistencia para control interno.</p>
+        </div>
+      </div>
+
+      <div className="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/20 shadow-sm">
+        <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+          <span className="material-symbols-outlined text-primary">filter_alt</span>
+          Filtros de Reporte
+        </h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
           <div>
-            <h1 className="text-4xl font-extrabold tracking-tight text-on-surface">Panel de Control</h1>
-            <p className="text-on-surface-variant mt-1 font-medium capitalize">{format(new Date(), "EEEE, d 'de' MMMM", { locale: es })} • Sesión Académica</p>
+            <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Fecha</label>
+            <input 
+              type="date" 
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full bg-surface-container-highest border-0 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+            />
           </div>
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-surface-container-low rounded-full">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-            <span className="text-sm font-semibold text-on-surface-variant">WhatsApp: <span className="text-on-surface">Conectado</span></span>
-            <span className="material-symbols-outlined text-emerald-600 text-lg">chat</span>
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Grado (Opcional)</label>
+            <select 
+              value={grado}
+              onChange={(e) => setGrado(e.target.value)}
+              className="w-full bg-surface-container-highest border-0 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+            >
+              <option value="">Todos los grados</option>
+              {gradosOptions.map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
           </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-          <div className="md:col-span-8 bg-surface-container-lowest p-8 rounded-3xl ambient-shadow flex flex-col md:flex-row items-center justify-between border-none">
-            <div className="space-y-4 text-center md:text-left">
-              <h2 className="text-on-surface-variant font-semibold tracking-wide uppercase text-xs">Asistencia Diaria Total</h2>
-              <div className="text-7xl font-extrabold text-primary tracking-tighter">
-                {attendancePercentage}<span className="text-3xl text-primary-fixed-dim">%</span>
-              </div>
-              <p className="text-on-surface-variant max-w-xs">Porcentaje de estudiantes presentes el día de hoy.</p>
-              <Link to="/scanner" className="cta-gradient text-on-primary px-8 py-4 rounded-xl font-bold flex items-center justify-center md:justify-start gap-3 shadow-lg hover:opacity-90 transition-all active:scale-95 mt-4 w-fit mx-auto md:mx-0">
-                <span className="material-symbols-outlined">qr_code_scanner</span>
-                Iniciar Escáner QR
-              </Link>
-            </div>
-            <div className="relative w-48 h-48 mt-8 md:mt-0">
-              <svg className="w-full h-full" viewBox="0 0 36 36">
-                <path className="text-surface-container-highest stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" strokeWidth="3"></path>
-                <path className="text-primary stroke-current" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" strokeDasharray={`${attendancePercentage}, 100`} strokeLinecap="round" strokeWidth="3"></path>
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="material-symbols-outlined text-4xl text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>school</span>
-              </div>
-            </div>
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Sección (Opcional)</label>
+            <select 
+              value={seccion}
+              onChange={(e) => setSeccion(e.target.value)}
+              className="w-full bg-surface-container-highest border-0 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+            >
+              <option value="">Todas las secciones</option>
+              {seccionesOptions.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
           </div>
-
-          <div className="md:col-span-4 grid grid-cols-1 gap-6">
-            <div className="bg-primary-fixed p-6 rounded-3xl flex items-center justify-between">
-              <div>
-                <p className="text-on-primary-fixed-variant text-sm font-bold uppercase tracking-widest">Presentes</p>
-                <h3 className="text-4xl font-black text-on-primary-fixed">{stats.present.toLocaleString()}</h3>
-              </div>
-              <span className="material-symbols-outlined text-4xl text-on-primary-fixed-variant">how_to_reg</span>
-            </div>
-            <div className="bg-tertiary-fixed p-6 rounded-3xl flex items-center justify-between">
-              <div>
-                <p className="text-on-tertiary-fixed-variant text-sm font-bold uppercase tracking-widest">Ausentes</p>
-                <h3 className="text-4xl font-black text-on-tertiary-fixed">{stats.absent.toLocaleString()}</h3>
-              </div>
-              <span className="material-symbols-outlined text-4xl text-on-tertiary-fixed-variant">person_off</span>
-            </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={generateReport}
+              disabled={isLoading}
+              className="flex-1 py-3 bg-primary text-on-primary font-bold rounded-xl shadow-sm hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-sm">search</span>
+              Generar
+            </button>
+            <button 
+              onClick={downloadExcel}
+              disabled={reportData.length === 0}
+              className="py-3 px-4 bg-secondary-container text-on-secondary-container font-bold rounded-xl shadow-sm hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              title="Descargar Excel"
+            >
+              <span className="material-symbols-outlined text-sm">download</span>
+            </button>
           </div>
         </div>
-      </section>
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <section className="lg:col-span-2 space-y-6">
-          <div className="flex items-center justify-between px-2">
-            <h2 className="text-2xl font-bold tracking-tight">Actividad Reciente</h2>
-            <Link to="/students" className="text-primary font-semibold text-sm hover:underline">Ver todo</Link>
-          </div>
-          <div className="bg-surface-container-low rounded-3xl overflow-hidden">
-            <div className="grid grid-cols-12 px-6 py-4 border-b border-outline-variant/10 text-xs font-bold uppercase tracking-widest text-on-surface-variant">
-              <div className="col-span-6">Estudiante</div>
-              <div className="col-span-3">Hora</div>
-              <div className="col-span-3 text-right">Estado</div>
-            </div>
-            <div className="divide-y divide-outline-variant/5">
-              {recentLogs.length === 0 ? (
-                <div className="p-8 text-center text-on-surface-variant">
-                  No hay actividad reciente.
-                </div>
+      <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 overflow-hidden shadow-sm">
+        <div className="p-6 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-low/50">
+          <h3 className="font-bold text-lg flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary">list_alt</span>
+            Resultados del Reporte
+          </h3>
+          <span className="text-sm font-medium text-on-surface-variant bg-surface-container-highest px-3 py-1 rounded-full">
+            {reportData.length} registros
+          </span>
+        </div>
+        
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="text-xs text-on-surface-variant uppercase bg-surface-container-low/30">
+              <tr>
+                <th className="px-6 py-4 font-bold tracking-wider">Hora</th>
+                <th className="px-6 py-4 font-bold tracking-wider">Estudiante</th>
+                <th className="px-6 py-4 font-bold tracking-wider">DNI</th>
+                <th className="px-6 py-4 font-bold tracking-wider">Grado/Sección</th>
+                <th className="px-6 py-4 font-bold tracking-wider">Tipo</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-outline-variant/10">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center text-on-surface-variant">
+                    <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    Generando reporte...
+                  </td>
+                </tr>
+              ) : reportData.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center text-on-surface-variant">
+                    <span className="material-symbols-outlined text-4xl mb-2 opacity-50">search_off</span>
+                    <p>No se encontraron registros para los filtros seleccionados.</p>
+                  </td>
+                </tr>
               ) : (
-                recentLogs.map((log) => (
-                  <div key={log.id} className="grid grid-cols-12 items-center px-6 py-5 bg-surface-container-lowest transition-colors hover:bg-surface-container-high/20">
-                    <div className="col-span-6 flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center overflow-hidden">
-                        {log.avatarUrl ? (
-                          <img src={log.avatarUrl} alt={log.studentName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                        ) : (
-                          <span className="material-symbols-outlined text-on-secondary-container">person</span>
-                        )}
-                      </div>
-                      <div>
-                        <p className="font-bold text-on-surface">{log.studentName}</p>
-                        <p className="text-xs text-on-surface-variant">{log.grado} {log.seccion} • DNI: {log.studentDni}</p>
-                      </div>
-                    </div>
-                    <div className="col-span-3 text-sm font-medium text-on-surface-variant">
-                      {log.timestamp?.toDate ? format(log.timestamp.toDate(), 'hh:mm a') : '--:--'}
-                    </div>
-                    <div className="col-span-3 text-right">
-                      <span className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded-lg ${
-                        log.status === 'presente' ? 'bg-primary-fixed text-on-primary-fixed' :
-                        log.status === 'tarde' ? 'bg-tertiary-fixed text-on-tertiary-fixed' :
-                        'bg-error-container text-on-error-container'
+                reportData.map((log) => (
+                  <tr key={log.id} className="hover:bg-surface-container-highest/20 transition-colors">
+                    <td className="px-6 py-4 font-mono text-xs">
+                      {format(log.timestamp.toDate(), 'HH:mm:ss')}
+                    </td>
+                    <td className="px-6 py-4 font-medium text-on-surface">
+                      {log.studentName}
+                    </td>
+                    <td className="px-6 py-4 font-mono text-xs text-on-surface-variant">
+                      {log.studentDni}
+                    </td>
+                    <td className="px-6 py-4">
+                      {log.grado || '-'} / {log.seccion || '-'}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        log.type === 'entrada' 
+                          ? 'bg-primary-container text-on-primary-container' 
+                          : 'bg-secondary-container text-on-secondary-container'
                       }`}>
-                        {log.status}
+                        <span className="material-symbols-outlined text-[12px]">
+                          {log.type === 'entrada' ? 'login' : 'logout'}
+                        </span>
+                        {log.type}
                       </span>
-                    </div>
-                  </div>
+                    </td>
+                  </tr>
                 ))
               )}
-            </div>
-          </div>
-        </section>
-
-        <section className="space-y-6">
-          <h2 className="text-2xl font-bold tracking-tight px-2">Alertas del Sistema</h2>
-          <div className="bg-surface-container-low p-6 rounded-3xl space-y-6">
-            <div className="flex gap-4">
-              <div className="w-10 h-10 shrink-0 bg-primary-fixed rounded-xl flex items-center justify-center text-primary">
-                <span className="material-symbols-outlined">notifications_active</span>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-bold text-on-surface">Sincronización WhatsApp</p>
-                <p className="text-xs text-on-surface-variant leading-relaxed">El servicio de mensajería está activo y esperando escaneos.</p>
-                <span className="text-[10px] text-on-surface-variant font-medium">Actualizado</span>
-              </div>
-            </div>
-            <hr className="border-outline-variant/20" />
-            <div className="flex gap-4">
-              <div className="w-10 h-10 shrink-0 bg-tertiary-fixed rounded-xl flex items-center justify-center text-tertiary">
-                <span className="material-symbols-outlined">info</span>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-bold text-on-surface">Base de datos limpia</p>
-                <p className="text-xs text-on-surface-variant leading-relaxed">El sistema está listo para importar estudiantes desde Excel.</p>
-                <span className="text-[10px] text-on-surface-variant font-medium">Sistema</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-secondary-container p-6 rounded-3xl">
-            <h4 className="text-on-secondary-container font-extrabold text-lg mb-2">Consejo del Día</h4>
-            <p className="text-on-secondary-container/80 text-sm leading-relaxed mb-4">Puedes subir a todos tus estudiantes de una sola vez usando la plantilla de Excel en la pestaña "Estudiantes".</p>
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-on-secondary-container">lightbulb</span>
-              <span className="text-xs font-bold text-on-secondary-container">Sugerencia</span>
-            </div>
-          </div>
-        </section>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

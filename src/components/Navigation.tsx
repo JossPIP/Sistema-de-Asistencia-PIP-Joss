@@ -2,13 +2,13 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { cn } from '../lib/utils';
 
-export function Navigation() {
+export function Navigation({ userRole }: { userRole?: string | null }) {
   return (
     <nav className="fixed bottom-0 left-0 w-full glass-panel z-50 rounded-t-2xl shadow-[0_-4px_24px_rgba(25,28,29,0.04)] border-t border-outline-variant/20 flex justify-around items-center px-4 pb-4 pt-2 md:hidden">
-      <NavItem to="/" icon="dashboard" label="Panel" />
+      {userRole === 'admin' && <NavItem to="/" icon="dashboard" label="Panel" />}
       <NavItem to="/scanner" icon="qr_code_scanner" label="Escáner" />
-      <NavItem to="/students" icon="group" label="Estudiantes" />
-      <NavItem to="/settings" icon="settings" label="Ajustes" />
+      {userRole === 'admin' && <NavItem to="/students" icon="group" label="Estudiantes" />}
+      {userRole === 'admin' && <NavItem to="/settings" icon="settings" label="Ajustes" />}
     </nav>
   );
 }
@@ -43,7 +43,7 @@ function NavItem({ to, icon, label }: { to: string; icon: string; label: string 
   );
 }
 
-export function TopBar() {
+export function TopBar({ userRole }: { userRole?: string | null }) {
   return (
     <header className="w-full top-0 sticky z-40 bg-surface/90 backdrop-blur-md flex justify-between items-center px-6 py-4 border-b border-outline-variant/10">
       <div className="flex items-center gap-3">
@@ -52,16 +52,16 @@ export function TopBar() {
       </div>
       <div className="flex items-center gap-4">
         <div className="hidden md:flex items-center space-x-6 mr-6">
-          <DesktopNavLink to="/" label="Panel" />
+          {userRole === 'admin' && <DesktopNavLink to="/" label="Panel" />}
           <DesktopNavLink to="/scanner" label="Escáner" />
-          <DesktopNavLink to="/students" label="Estudiantes" />
-          <DesktopNavLink to="/settings" label="Ajustes" />
+          {userRole === 'admin' && <DesktopNavLink to="/students" label="Estudiantes" />}
+          {userRole === 'admin' && <DesktopNavLink to="/settings" label="Ajustes" />}
         </div>
         <div className="h-10 w-10 rounded-full bg-surface-container-highest flex items-center justify-center overflow-hidden border border-outline-variant/20">
           <img
             className="w-full h-full object-cover"
             src="https://lh3.googleusercontent.com/aida-public/AB6AXuAI0oxuCqDsSRsdaPBV2gAkLNVWbtK0I_gBAEhCNLeNaaBdiwwiWph3R0UCsGqvDIgq3OHJzy9RpWKqukD2RZ_dlR_Ay5lg376NcumzZR1xPsZ5uhiZTU4indH4U0FCnb6cMsI-ZP6-5EEPK8qLky-nSGYKBKkZVVl7LbqZdBZkVwruijvjiOBkdh3lZyV8mXNyA_saCUQ_wsRzX2IoDhckiWMWq1gKR9PHlCYFncPsKHA8XN6Vpcx_eYkhPNCQZq2Yb1uJvO0OWBk"
-            alt="Admin Profile"
+            alt="Profile"
             referrerPolicy="no-referrer"
           />
         </div>

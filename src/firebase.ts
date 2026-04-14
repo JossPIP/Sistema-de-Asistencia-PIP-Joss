@@ -1,23 +1,56 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 
+// Secondary app for creating users without logging out the admin
+const secondaryApp = initializeApp(firebaseConfig, "Secondary");
+export const secondaryAuth = getAuth(secondaryApp);
+
 export const loginWithCredentials = async (username: string, password: string) => {
   // Usamos un dominio ficticio para adaptar el "usuario" al sistema de correos de Firebase
   const email = `${username}@digitalregistrar.app`;
   try {
-    await signInWithEmailAndPassword(auth, email, password);
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    
+    // Check if user document exists, if not, create it (for the initial admin)
+    const userDocRef = doc(db, 'users', userCredential.user.uid);
+    const userDocSnap = await getDoc(userDocRef);
+    
+    if (!userDocSnap.exists()) {
+      if (username === '41916759') {
+        await setDoc(userDocRef, {
+          uid: userCredential.user.uid,
+          username: username,
+          role: 'admin',
+          name: 'Administrador Principal'
+        });
+      } else {
+        await setDoc(userDocRef, {
+          uid: userCredential.user.uid,
+          username: username,
+          role: 'teacher',
+          name: 'Profesor'
+        });
+      }
+    }
+    return userCredential;
   } catch (error: any) {
     // Si es el administrador por defecto y no existe, lo creamos automáticamente la primera vez
     if (username === '41916759' && password === 'Joysse1809@') {
       try {
-        await createUserWithEmailAndPassword(auth, email, password);
-        return;
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        await setDoc(doc(db, 'users', userCredential.user.uid), {
+          uid: userCredential.user.uid,
+          username: username,
+          role: 'admin',
+          name: 'Administrador Principal'
+        });
+        return userCredential;
       } catch (createError) {
         throw error;
       }

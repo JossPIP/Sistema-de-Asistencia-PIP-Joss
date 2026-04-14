@@ -18,7 +18,8 @@ export default function Students() {
     genero: 'M',
     celular: '',
     grado: '',
-    seccion: ''
+    seccion: '',
+    callMeBotApiKey: ''
   });
 
   useEffect(() => {
@@ -49,7 +50,7 @@ export default function Students() {
         createdAt: serverTimestamp()
       });
       setIsAdding(false);
-      setNewStudent({ dni: '', apellidoPaterno: '', apellidoMaterno: '', nombres: '', genero: 'M', celular: '', grado: '', seccion: '' });
+      setNewStudent({ dni: '', apellidoPaterno: '', apellidoMaterno: '', nombres: '', genero: 'M', celular: '', grado: '', seccion: '', callMeBotApiKey: '' });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'students');
     }
@@ -64,7 +65,8 @@ export default function Students() {
       Genero: 'M',
       Celular: '+51987654321',
       Grado: '1ro Secundaria',
-      Seccion: 'A'
+      Seccion: 'A',
+      'CallMeBot API Key': '123456'
     }]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Plantilla");
@@ -101,6 +103,7 @@ export default function Students() {
             celular: String(row['Celular'] || ''),
             grado: String(row['Grado'] || ''),
             seccion: String(row['Seccion'] || ''),
+            callMeBotApiKey: String(row['CallMeBot API Key'] || ''),
             avatarUrl: `https://api.dicebear.com/9.x/avataaars/svg?seed=${row['DNI']}`,
             createdAt: serverTimestamp()
           });
@@ -210,6 +213,7 @@ export default function Students() {
             <input required placeholder="Celular (ej: +51987654321)" value={newStudent.celular} onChange={e => setNewStudent({...newStudent, celular: e.target.value})} className="bg-surface-container-highest border-0 rounded-xl px-4 py-3 text-sm" />
             <input required placeholder="Grado" value={newStudent.grado} onChange={e => setNewStudent({...newStudent, grado: e.target.value})} className="bg-surface-container-highest border-0 rounded-xl px-4 py-3 text-sm" />
             <input required placeholder="Sección" value={newStudent.seccion} onChange={e => setNewStudent({...newStudent, seccion: e.target.value})} className="bg-surface-container-highest border-0 rounded-xl px-4 py-3 text-sm" />
+            <input placeholder="CallMeBot API Key (Opcional)" value={newStudent.callMeBotApiKey} onChange={e => setNewStudent({...newStudent, callMeBotApiKey: e.target.value})} className="bg-surface-container-highest border-0 rounded-xl px-4 py-3 text-sm md:col-span-2" />
             <div className="md:col-span-2 flex justify-end mt-2">
               <button type="submit" className="px-6 py-3 bg-primary text-on-primary rounded-xl font-bold hover:bg-primary/90 transition-colors">Guardar Estudiante</button>
             </div>
