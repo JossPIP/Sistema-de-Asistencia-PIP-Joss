@@ -36,8 +36,13 @@ export default function Dashboard() {
 
       // Process attendance data for charts
       const gradeCounts: Record<string, number> = {};
-      let entradas = 0;
-      let salidas = 0;
+      let temprano = 0;
+      let tardanza = 0;
+      
+      // We need to track unique students who attended today to calculate absentees
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const attendedStudentIds = new Set<string>();
 
       attendanceSnap.forEach(doc => {
         const data = doc.data();
@@ -46,10 +51,19 @@ export default function Dashboard() {
         const grado = data.grado || 'Sin Grado';
         gradeCounts[grado] = (gradeCounts[grado] || 0) + 1;
 
-        // By Type
-        if (data.type === 'entrada') entradas++;
-        if (data.type === 'salida') salidas++;
+        // By Type (Temprano vs Tardanza) - only counting 'entrada' for this metric
+        if (data.type === 'entrada') {
+          if (data.status === 'presente') temprano++;
+          if (data.status === 'tarde') tardanza++;
+          
+          // Check if it's today's record to calculate absentees
+          if (data.timestamp && data.timestamp.toDate() >= today) {
+            attendedStudentIds.add(data.studentRef);
+          }
+        }
       });
+
+      const faltantes = Math.max(0, totalStudents - attendedStudentIds.size);
 
       const gradeData = Object.keys(gradeCounts).map(key => ({
         name: key,
@@ -57,8 +71,9 @@ export default function Dashboard() {
       })).sort((a, b) => b.Asistencias - a.Asistencias);
 
       const typeData = [
-        { name: 'Entradas', value: entradas },
-        { name: 'Salidas', value: salidas }
+        { name: 'Temprano', value: temprano },
+        { name: 'Tardanza', value: tardanza },
+        { name: 'Faltantes (Hoy)', value: faltantes }
       ];
 
       setStats({ totalStudents, totalTeachers, totalLogs });
@@ -146,7 +161,7 @@ export default function Dashboard() {
         <div className="bg-surface-container-lowest p-6 rounded-2xl border border-outline-variant/20 shadow-sm">
           <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
             <span className="material-symbols-outlined text-primary">pie_chart</span>
-            Entradas vs Salidas
+            Estado de Asistencia
           </h3>
           <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">

@@ -9,6 +9,7 @@ export default function Scanner() {
   const [scanMode, setScanMode] = useState<'entrada' | 'salida'>('entrada');
   const [lastScan, setLastScan] = useState<any>(null);
   const [isScanning, setIsScanning] = useState(true);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -18,23 +19,17 @@ export default function Scanner() {
     if (!scannerRef.current) {
       scannerRef.current = new Html5Qrcode("reader");
       
-      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+      const config = { fps: 30, qrbox: { width: 250, height: 250 } };
       
-      // Request camera permissions and start scanning
-      Html5Qrcode.getCameras().then(devices => {
-        if (devices && devices.length) {
-          // Use the environment camera (back camera) if available
-          scannerRef.current?.start(
-            { facingMode: "environment" },
-            config,
-            onScanSuccess,
-            onScanFailure
-          ).catch(err => {
-            console.error("Error starting camera:", err);
-          });
-        }
-      }).catch(err => {
-        console.error("Error getting cameras:", err);
+      // Start scanning directly, which prompts for permissions automatically
+      scannerRef.current.start(
+        { facingMode: "environment" },
+        config,
+        onScanSuccess,
+        onScanFailure
+      ).catch(err => {
+        console.error("Error starting camera:", err);
+        setCameraError("Permiso de cámara denegado o cámara no encontrada. Por favor, habilita el acceso o usa el botón 'Examinar'.");
       });
     }
 
@@ -138,8 +133,8 @@ export default function Scanner() {
         status: status
       });
 
-      // Intentar enviar WhatsApp
-      await sendWhatsAppMessage(studentData, scanMode);
+      // Intentar enviar WhatsApp (sin await para no bloquear el escáner)
+      sendWhatsAppMessage(studentData, scanMode);
 
       setLastScan({
         ...studentData,
@@ -147,7 +142,7 @@ export default function Scanner() {
         time: new Date()
       });
 
-      // Resume scanning after 3 seconds
+      // Resume scanning after 1 second for faster processing
       setTimeout(() => {
         setLastScan(null);
         if (scannerRef.current) {
@@ -155,7 +150,7 @@ export default function Scanner() {
             scannerRef.current.resume();
           } catch (e) {}
         }
-      }, 3000);
+      }, 1000);
 
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'attendance');
@@ -212,6 +207,15 @@ export default function Scanner() {
         <div className="scan-line pointer-events-none"></div>
         <div id="reader" className="w-full h-full rounded-2xl overflow-hidden [&>div]:border-none [&>div]:shadow-none bg-black"></div>
         
+        {cameraError && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/80 rounded-2xl p-6 text-center">
+            <div className="text-white">
+              <span className="material-symbols-outlined text-4xl text-error mb-2">videocam_off</span>
+              <p className="text-sm font-medium">{cameraError}</p>
+            </div>
+          </div>
+        )}
+
         {/* Corner Accents */}
         <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-primary rounded-tl-3xl pointer-events-none"></div>
         <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-primary rounded-tr-3xl pointer-events-none"></div>

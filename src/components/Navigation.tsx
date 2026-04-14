@@ -44,6 +44,8 @@ function NavItem({ to, icon, label }: { to: string; icon: string; label: string 
   );
 }
 
+import { logout } from '../firebase';
+
 export function TopBar({ userRole }: { userRole?: string | null }) {
   return (
     <header className="w-full top-0 sticky z-40 bg-surface/90 backdrop-blur-md flex justify-between items-center px-6 py-4 border-b border-outline-variant/10">
@@ -59,7 +61,14 @@ export function TopBar({ userRole }: { userRole?: string | null }) {
           {userRole === 'admin' && <DesktopNavLink to="/students" label="Estudiantes" />}
           {userRole === 'admin' && <DesktopNavLink to="/settings" label="Ajustes" />}
         </div>
-        <div className="h-10 w-10 rounded-full bg-surface-container-highest flex items-center justify-center overflow-hidden border border-outline-variant/20">
+        <button 
+          onClick={() => logout()}
+          className="flex items-center justify-center p-2 text-on-surface-variant hover:text-error hover:bg-error/10 rounded-full transition-colors"
+          title="Cerrar Sesión"
+        >
+          <span className="material-symbols-outlined">logout</span>
+        </button>
+        <div className="h-10 w-10 rounded-full bg-surface-container-highest flex items-center justify-center overflow-hidden border border-outline-variant/20 hidden sm:flex">
           <img
             className="w-full h-full object-cover"
             src="https://lh3.googleusercontent.com/aida-public/AB6AXuAI0oxuCqDsSRsdaPBV2gAkLNVWbtK0I_gBAEhCNLeNaaBdiwwiWph3R0UCsGqvDIgq3OHJzy9RpWKqukD2RZ_dlR_Ay5lg376NcumzZR1xPsZ5uhiZTU4indH4U0FCnb6cMsI-ZP6-5EEPK8qLky-nSGYKBKkZVVl7LbqZdBZkVwruijvjiOBkdh3lZyV8mXNyA_saCUQ_wsRzX2IoDhckiWMWq1gKR9PHlCYFncPsKHA8XN6Vpcx_eYkhPNCQZq2Yb1uJvO0OWBk"
