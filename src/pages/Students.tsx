@@ -302,70 +302,78 @@ export default function Students() {
         </div>
 
         <div className="flex-1 overflow-auto">
-          <div className="min-w-[800px]">
-            <div className="grid grid-cols-12 px-6 py-4 bg-surface-container-low/50 text-xs font-bold uppercase tracking-widest text-on-surface-variant sticky top-0 z-10 backdrop-blur-md items-center">
-              <div className="col-span-1 flex justify-center">
-                <input 
-                  type="checkbox" 
-                  checked={selectedStudents.size === filteredStudents.length && filteredStudents.length > 0}
-                  onChange={toggleAllSelection}
-                  className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer"
-                />
-              </div>
-              <div className="col-span-3">Estudiante</div>
-              <div className="col-span-2">DNI</div>
-              <div className="col-span-3">Grado / Sección</div>
-              <div className="col-span-3 text-right">Contacto</div>
-            </div>
-            <div className="divide-y divide-outline-variant/5">
+          <table className="w-full text-left border-collapse min-w-[800px]">
+            <thead className="bg-surface-container-low/50 text-xs font-bold uppercase tracking-widest text-on-surface-variant sticky top-0 z-10 backdrop-blur-md">
+              <tr>
+                <th className="px-6 py-4 w-12 text-center">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedStudents.size === filteredStudents.length && filteredStudents.length > 0}
+                    onChange={toggleAllSelection}
+                    className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer"
+                  />
+                </th>
+                <th className="px-6 py-4">Estudiante</th>
+                <th className="px-6 py-4 w-32">DNI</th>
+                <th className="px-6 py-4 w-48">Grado / Sección</th>
+                <th className="px-6 py-4 w-32 text-right">Contacto</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-outline-variant/5">
               {filteredStudents.length === 0 ? (
-                <div className="p-12 text-center flex flex-col items-center justify-center text-on-surface-variant">
-                  <span className="material-symbols-outlined text-6xl mb-4 opacity-50">search_off</span>
-                  <p>No se encontraron estudiantes.</p>
-                </div>
+                <tr>
+                  <td colSpan={5} className="p-12 text-center text-on-surface-variant">
+                    <div className="flex flex-col items-center justify-center">
+                      <span className="material-symbols-outlined text-6xl mb-4 opacity-50">search_off</span>
+                      <p>No se encontraron estudiantes.</p>
+                    </div>
+                  </td>
+                </tr>
               ) : (
                 filteredStudents.map((student) => (
-                  <div key={student.id} className={`grid grid-cols-12 items-center px-6 py-4 hover:bg-surface-container-high/20 transition-colors group ${selectedStudents.has(student.id) ? 'bg-primary/5' : ''}`}>
-                    <div className="col-span-1 flex justify-center">
+                  <tr key={student.id} className={`hover:bg-surface-container-high/20 transition-colors group ${selectedStudents.has(student.id) ? 'bg-primary/5' : ''}`}>
+                    <td className="px-6 py-4 text-center">
                       <input 
                         type="checkbox" 
                         checked={selectedStudents.has(student.id)}
                         onChange={() => toggleStudentSelection(student.id)}
                         className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer"
                       />
-                    </div>
-                    <div className="col-span-3 flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-full bg-secondary-container overflow-hidden shrink-0">
-                        <img src={student.avatarUrl} alt={student.nombres} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-secondary-container overflow-hidden shrink-0">
+                          <img src={student.avatarUrl} alt={student.nombres} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-on-surface">{student.apellidoPaterno} {student.apellidoMaterno}, {student.nombres}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-bold text-on-surface truncate">{student.apellidoPaterno} {student.apellidoMaterno}, {student.nombres}</p>
-                      </div>
-                    </div>
-                    <div className="col-span-2 text-sm text-on-surface-variant font-mono">
+                    </td>
+                    <td className="px-6 py-4 text-sm text-on-surface-variant font-mono">
                       {student.dni}
-                    </div>
-                    <div className="col-span-3">
-                      <span className="px-2.5 py-1 bg-surface-container-highest rounded-md text-xs font-medium text-on-surface-variant">
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="px-2.5 py-1 bg-surface-container-highest rounded-md text-xs font-medium text-on-surface-variant whitespace-nowrap">
                         {student.grado} - {student.seccion}
                       </span>
-                    </div>
-                    <div className="col-span-3 flex justify-end">
+                    </td>
+                    <td className="px-6 py-4 text-right">
                       <a 
                         href={`https://wa.me/${student.celular.replace(/\D/g, '')}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 rounded-lg transition-colors text-sm font-semibold"
+                        className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 rounded-lg transition-colors text-sm font-semibold"
                       >
                         <span className="material-symbols-outlined text-sm">chat</span>
                         WhatsApp
                       </a>
-                    </div>
-                  </div>
+                    </td>
+                  </tr>
                 ))
               )}
-            </div>
-          </div>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

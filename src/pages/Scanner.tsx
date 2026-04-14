@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { format } from 'date-fns';
@@ -9,27 +9,62 @@ export default function Scanner() {
   const [scanMode, setScanMode] = useState<'entrada' | 'salida'>('entrada');
   const [lastScan, setLastScan] = useState<any>(null);
   const [isScanning, setIsScanning] = useState(true);
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isScanning) return;
 
     if (!scannerRef.current) {
-      scannerRef.current = new Html5QrcodeScanner(
-        "reader",
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        /* verbose= */ false
-      );
-      scannerRef.current.render(onScanSuccess, onScanFailure);
+      scannerRef.current = new Html5Qrcode("reader");
+      
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+      
+      // Request camera permissions and start scanning
+      Html5Qrcode.getCameras().then(devices => {
+        if (devices && devices.length) {
+          // Use the environment camera (back camera) if available
+          scannerRef.current?.start(
+            { facingMode: "environment" },
+            config,
+            onScanSuccess,
+            onScanFailure
+          ).catch(err => {
+            console.error("Error starting camera:", err);
+          });
+        }
+      }).catch(err => {
+        console.error("Error getting cameras:", err);
+      });
     }
 
     return () => {
-      if (scannerRef.current) {
-        scannerRef.current.clear().catch(console.error);
+      if (scannerRef.current && scannerRef.current.isScanning) {
+        scannerRef.current.stop().then(() => {
+          scannerRef.current?.clear();
+          scannerRef.current = null;
+        }).catch(console.error);
+      } else if (scannerRef.current) {
+        scannerRef.current.clear();
         scannerRef.current = null;
       }
     };
   }, [isScanning, scanMode]);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0 && scannerRef.current) {
+      const file = e.target.files[0];
+      try {
+        const decodedText = await scannerRef.current.scanFile(file, true);
+        onScanSuccess(decodedText);
+      } catch (err) {
+        alert("No se pudo leer un código QR en la imagen.");
+        console.error("Error scanning file:", err);
+      }
+      // Reset input so the same file can be selected again
+      e.target.value = '';
+    }
+  };
 
   const sendWhatsAppMessage = async (studentData: any, mode: 'entrada' | 'salida') => {
     if (!studentData.callMeBotApiKey || !studentData.celular) {
@@ -182,6 +217,24 @@ export default function Scanner() {
         <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-primary rounded-tr-3xl pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-primary rounded-bl-3xl pointer-events-none"></div>
         <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-primary rounded-br-3xl pointer-events-none"></div>
+      </div>
+
+      <div className="relative z-10 mt-6 flex justify-center">
+        <input 
+          type="file" 
+          accept="image/*" 
+          ref={fileInputRef} 
+          onChange={handleFileUpload} 
+          className="hidden" 
+          id="qr-upload"
+        />
+        <label 
+          htmlFor="qr-upload" 
+          className="px-6 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-bold transition-all duration-300 flex items-center gap-2 cursor-pointer border border-white/20 shadow-lg backdrop-blur-sm"
+        >
+          <span className="material-symbols-outlined text-sm">image</span>
+          Examinar
+        </label>
       </div>
 
       {lastScan && (

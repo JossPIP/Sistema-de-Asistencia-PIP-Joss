@@ -1,5 +1,5 @@
 {
-  "name": "",
-  "description": "",
-  "requestFramePermissions": []
+  "name": "Sistema de Asistencia - JCMS",
+  "description": "Sistema de asistencia con escáner QR y notificaciones por WhatsApp",
+  "requestFramePermissions": ["camera"]
 }

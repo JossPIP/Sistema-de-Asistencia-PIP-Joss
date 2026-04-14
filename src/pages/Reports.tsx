@@ -6,7 +6,7 @@ import { es } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
 
 export default function Reports() {
-  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [date, setDate] = useState('');
   const [grado, setGrado] = useState('');
   const [seccion, setSeccion] = useState('');
   const [reportData, setReportData] = useState<any[]>([]);

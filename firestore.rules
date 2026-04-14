@@ -86,11 +86,15 @@ service cloud.firestore {
              (!('exitTemplate' in data) || (data.exitTemplate is string && data.exitTemplate.size() < 1000));
     }
 
+    function isAdmin() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     match /users/{documentId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidUser(request.resource.data) && uidUnchanged();
-      allow update: if isAuthenticated() && isValidUser(request.resource.data) && uidNotModified();
-      allow delete: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (uidUnchanged() || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (uidNotModified() || isAdmin());
+      allow delete: if isAdmin();
     }
 
     match /students/{documentId} {
