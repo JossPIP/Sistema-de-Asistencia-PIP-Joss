@@ -13,6 +13,18 @@ export default function Scanner({ userRole }: { userRole?: string | null }) {
   const [attendanceRules, setAttendanceRules] = useState({ lateTime: '08:30', absentTime: '10:00' });
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Refs to avoid restarting the camera when state changes
+  const scanModeRef = useRef(scanMode);
+  const attendanceRulesRef = useRef(attendanceRules);
+
+  useEffect(() => {
+    scanModeRef.current = scanMode;
+  }, [scanMode]);
+
+  useEffect(() => {
+    attendanceRulesRef.current = attendanceRules;
+  }, [attendanceRules]);
 
   useEffect(() => {
     const fetchRules = async () => {
@@ -60,7 +72,7 @@ export default function Scanner({ userRole }: { userRole?: string | null }) {
         scannerRef.current = null;
       }
     };
-  }, [isScanning, scanMode, attendanceRules]);
+  }, [isScanning]); // Removed scanMode and attendanceRules from dependencies
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0 && scannerRef.current) {
@@ -137,7 +149,7 @@ export default function Scanner({ userRole }: { userRole?: string | null }) {
         const attendanceQ = query(
           collection(db, 'attendance'), 
           where('studentRef', '==', studentDoc.id),
-          where('type', '==', scanMode)
+          where('type', '==', scanModeRef.current)
         );
         const attendanceSnap = await getDocs(attendanceQ);
         
@@ -147,7 +159,7 @@ export default function Scanner({ userRole }: { userRole?: string | null }) {
         });
 
         if (alreadyScannedToday) {
-          alert(`Este estudiante ya registró su ${scanMode} hoy.`);
+          alert(`Este estudiante ya registró su ${scanModeRef.current} hoy.`);
           if (scannerRef.current) {
             try {
               scannerRef.current.resume();
@@ -159,9 +171,9 @@ export default function Scanner({ userRole }: { userRole?: string | null }) {
 
       // Determine status using attendance rules
       const now = new Date();
-      const [lateHour, lateMinute] = attendanceRules.lateTime.split(':').map(Number);
+      const [lateHour, lateMinute] = attendanceRulesRef.current.lateTime.split(':').map(Number);
       const isLate = now.getHours() > lateHour || (now.getHours() === lateHour && now.getMinutes() > lateMinute);
-      const status = scanMode === 'entrada' ? (isLate ? 'tarde' : 'presente') : 'presente';
+      const status = scanModeRef.current === 'entrada' ? (isLate ? 'tarde' : 'presente') : 'presente';
 
       // Log attendance
       await addDoc(collection(db, 'attendance'), {
@@ -173,12 +185,12 @@ export default function Scanner({ userRole }: { userRole?: string | null }) {
         seccion: studentData.seccion,
         avatarUrl: studentData.avatarUrl || null,
         timestamp: serverTimestamp(),
-        type: scanMode,
+        type: scanModeRef.current,
         status: status
       });
 
       // Intentar enviar WhatsApp (sin await para no bloquear el escáner)
-      sendWhatsAppMessage(studentData, scanMode);
+      sendWhatsAppMessage(studentData, scanModeRef.current);
 
       setLastScan({
         ...studentData,

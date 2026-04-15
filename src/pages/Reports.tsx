@@ -11,6 +11,7 @@ export default function Reports() {
   const [seccion, setSeccion] = useState('');
   const [estado, setEstado] = useState('');
   const [reportData, setReportData] = useState<any[]>([]);
+  const [visibleCount, setVisibleCount] = useState(20);
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessingFaltas, setIsProcessingFaltas] = useState(false);
   const [gradosOptions, setGradosOptions] = useState<string[]>([]);
@@ -147,6 +148,7 @@ export default function Reports() {
       }
 
       setReportData(logs);
+      setVisibleCount(20);
     } catch (error) {
       handleFirestoreError(error, OperationType.GET, 'attendance');
     } finally {
@@ -312,7 +314,7 @@ export default function Reports() {
                   </td>
                 </tr>
               ) : (
-                reportData.map((log) => (
+                reportData.slice(0, visibleCount).map((log) => (
                   <tr key={log.id} className="hover:bg-surface-container-highest/20 transition-colors">
                     <td className="px-6 py-4 font-mono text-xs">
                       {format(log.timestamp.toDate(), 'dd/MM/yyyy')}
@@ -355,6 +357,18 @@ export default function Reports() {
               )}
             </tbody>
           </table>
+          
+          {reportData.length > visibleCount && (
+            <div className="p-4 flex justify-center bg-surface-container-low/30 border-t border-outline-variant/10">
+              <button
+                onClick={() => setVisibleCount(prev => prev + 20)}
+                className="px-6 py-2.5 bg-secondary-container text-on-secondary-container font-semibold rounded-lg shadow-sm hover:opacity-90 transition-all flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-sm">expand_more</span>
+                Cargar más registros ({reportData.length - visibleCount} restantes)
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
