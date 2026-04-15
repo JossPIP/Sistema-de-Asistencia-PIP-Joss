@@ -76,14 +76,15 @@ service cloud.firestore {
     }
 
     function isValidSettings(data) {
-      let allowedFields = ['uid', 'whatsappApiKey', 'whatsappInstanceId', 'entryTemplate', 'exitTemplate'];
+      let allowedFields = ['uid', 'whatsappApiKey', 'whatsappInstanceId', 'entryTemplate', 'exitTemplate', 'lateTime', 'absentTime'];
       return hasOnlyAllowedFields(allowedFields) &&
-             hasRequiredFields(['uid']) &&
-             data.uid is string && data.uid.size() > 0 && data.uid.size() < 128 &&
+             (!('uid' in data) || (data.uid is string && data.uid.size() > 0 && data.uid.size() < 128)) &&
              (!('whatsappApiKey' in data) || (data.whatsappApiKey is string && data.whatsappApiKey.size() < 200)) &&
              (!('whatsappInstanceId' in data) || (data.whatsappInstanceId is string && data.whatsappInstanceId.size() < 200)) &&
              (!('entryTemplate' in data) || (data.entryTemplate is string && data.entryTemplate.size() < 1000)) &&
-             (!('exitTemplate' in data) || (data.exitTemplate is string && data.exitTemplate.size() < 1000));
+             (!('exitTemplate' in data) || (data.exitTemplate is string && data.exitTemplate.size() < 1000)) &&
+             (!('lateTime' in data) || (data.lateTime is string && data.lateTime.size() < 10)) &&
+             (!('absentTime' in data) || (data.absentTime is string && data.absentTime.size() < 10));
     }
 
     function isAdmin() {
@@ -109,6 +110,11 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isValidAttendanceLog(request.resource.data) && uidUnchanged();
       allow update: if isAuthenticated() && isValidAttendanceLog(request.resource.data) && uidNotModified() && areImmutableFieldsUnchanged(['timestamp']);
       allow delete: if isAuthenticated();
+    }
+
+    match /settings/{documentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
   }
 }

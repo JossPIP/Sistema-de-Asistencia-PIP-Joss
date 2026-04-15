@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, setDoc, doc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, setDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { db, secondaryAuth, handleFirestoreError, OperationType, logout } from '../firebase';
 
@@ -8,10 +8,43 @@ export default function Settings() {
   const [newTeacher, setNewTeacher] = useState({ username: '', password: '', name: '' });
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
+  
+  const [attendanceRules, setAttendanceRules] = useState({ lateTime: '08:30', absentTime: '10:00' });
+  const [isSavingRules, setIsSavingRules] = useState(false);
+  const [rulesMessage, setRulesMessage] = useState('');
 
   useEffect(() => {
     fetchTeachers();
+    fetchAttendanceRules();
   }, []);
+
+  const fetchAttendanceRules = async () => {
+    try {
+      const docRef = doc(db, 'settings', 'attendanceRules');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setAttendanceRules(docSnap.data() as any);
+      }
+    } catch (error) {
+      console.error("Error fetching rules:", error);
+    }
+  };
+
+  const handleSaveRules = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingRules(true);
+    setRulesMessage('');
+    try {
+      await setDoc(doc(db, 'settings', 'attendanceRules'), attendanceRules);
+      setRulesMessage('Reglas guardadas correctamente.');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'settings');
+      setRulesMessage('Error al guardar.');
+    } finally {
+      setIsSavingRules(false);
+      setTimeout(() => setRulesMessage(''), 3000);
+    }
+  };
 
   const fetchTeachers = async () => {
     try {
@@ -73,8 +106,8 @@ export default function Settings() {
     <div className="px-6 py-8 space-y-8 max-w-5xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-extrabold tracking-tight text-on-surface mb-2">Profesores</h1>
-          <p className="text-on-surface-variant text-lg">Gestiona los accesos para el personal docente.</p>
+          <h1 className="text-4xl font-extrabold tracking-tight text-on-surface mb-2">Ajustes</h1>
+          <p className="text-on-surface-variant text-lg">Configura las reglas de asistencia y gestiona accesos.</p>
         </div>
         <div className="flex gap-3">
           <button 
@@ -88,6 +121,56 @@ export default function Settings() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <section className="lg:col-span-12 bg-surface-container-low rounded-xl p-6 border-0 h-fit">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-12 h-12 rounded-xl bg-tertiary/10 flex items-center justify-center text-tertiary">
+              <span className="material-symbols-outlined">schedule</span>
+            </div>
+            <div>
+              <h2 className="text-xl font-bold tracking-tight">Reglas de Asistencia</h2>
+              <p className="text-sm text-on-surface-variant">Define los horarios para tardanzas y faltas automáticas.</p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSaveRules} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Hora Límite (Temprano)</label>
+              <input 
+                type="time" 
+                value={attendanceRules.lateTime}
+                onChange={(e) => setAttendanceRules({...attendanceRules, lateTime: e.target.value})}
+                className="w-full bg-surface-container-highest border-0 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Hora Límite (Tardanza)</label>
+              <input 
+                type="time" 
+                value={attendanceRules.absentTime}
+                onChange={(e) => setAttendanceRules({...attendanceRules, absentTime: e.target.value})}
+                className="w-full bg-surface-container-highest border-0 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                required
+              />
+            </div>
+            <div>
+              <button 
+                type="submit"
+                disabled={isSavingRules}
+                className="w-full py-3 bg-tertiary text-on-primary font-semibold rounded-xl shadow-sm hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-sm">save</span>
+                {isSavingRules ? 'Guardando...' : 'Guardar Reglas'}
+              </button>
+            </div>
+          </form>
+          {rulesMessage && (
+            <div className="mt-4 p-3 bg-tertiary-container text-on-tertiary-container rounded-lg text-sm font-medium">
+              {rulesMessage}
+            </div>
+          )}
+        </section>
+
         <section className="lg:col-span-5 bg-surface-container-low rounded-xl p-6 border-0 h-fit">
           <div className="flex items-center gap-4 mb-6">
             <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary">

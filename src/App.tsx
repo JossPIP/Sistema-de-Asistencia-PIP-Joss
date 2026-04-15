@@ -162,14 +162,14 @@ export default function App() {
                 <>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/reports" element={<Reports />} />
-                  <Route path="/scanner" element={<Scanner />} />
+                  <Route path="/scanner" element={<Scanner userRole={userRole} />} />
                   <Route path="/students" element={<Students />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </>
               ) : (
                 <>
-                  <Route path="/scanner" element={<Scanner />} />
+                  <Route path="/scanner" element={<Scanner userRole={userRole} />} />
                   <Route path="*" element={<Navigate to="/scanner" replace />} />
                 </>
               )}

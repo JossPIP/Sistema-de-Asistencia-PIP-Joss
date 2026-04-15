@@ -57,7 +57,8 @@ export default function Dashboard() {
           if (data.status === 'tarde') tardanza++;
           
           // Check if it's today's record to calculate absentees
-          if (data.timestamp && data.timestamp.toDate() >= today) {
+          // Only count as attended if status is not 'faltante'
+          if (data.timestamp && data.timestamp.toDate() >= today && data.status !== 'faltante') {
             attendedStudentIds.add(data.studentRef);
           }
         }

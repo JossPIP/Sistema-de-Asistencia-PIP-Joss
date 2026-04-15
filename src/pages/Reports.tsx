@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, getDoc, doc } from 'firebase/firestore';
+import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
@@ -9,8 +9,10 @@ export default function Reports() {
   const [date, setDate] = useState('');
   const [grado, setGrado] = useState('');
   const [seccion, setSeccion] = useState('');
+  const [estado, setEstado] = useState('');
   const [reportData, setReportData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isProcessingFaltas, setIsProcessingFaltas] = useState(false);
   const [gradosOptions, setGradosOptions] = useState<string[]>([]);
   const [seccionesOptions, setSeccionesOptions] = useState<string[]>([]);
 
@@ -40,16 +42,75 @@ export default function Reports() {
     }
   };
 
+  const procesarFaltas = async () => {
+    if (!window.confirm('¿Estás seguro de procesar las faltas para el día de hoy? Esto marcará como "faltante" a todos los estudiantes que no hayan registrado entrada hoy.')) return;
+    
+    setIsProcessingFaltas(true);
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 999);
+
+      // 1. Get all students
+      const studentsSnap = await getDocs(collection(db, 'students'));
+      const allStudents = studentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+
+      // 2. Get all attendances for today
+      const attendanceQ = query(
+        collection(db, 'attendance'),
+        where('timestamp', '>=', today),
+        where('timestamp', '<=', endOfDay),
+        where('type', '==', 'entrada')
+      );
+      const attendanceSnap = await getDocs(attendanceQ);
+      
+      const attendedStudentIds = new Set();
+      attendanceSnap.forEach(doc => {
+        attendedStudentIds.add(doc.data().studentRef);
+      });
+
+      // 3. Find missing students and create "faltante" records
+      let addedCount = 0;
+      for (const student of allStudents) {
+        if (!attendedStudentIds.has(student.id)) {
+          await addDoc(collection(db, 'attendance'), {
+            uid: auth.currentUser?.uid || 'system',
+            studentRef: student.id,
+            studentName: `${student.nombres} ${student.apellidoPaterno} ${student.apellidoMaterno}`,
+            studentDni: student.dni,
+            grado: student.grado,
+            seccion: student.seccion,
+            avatarUrl: student.avatarUrl || null,
+            timestamp: serverTimestamp(),
+            type: 'entrada',
+            status: 'faltante'
+          });
+          addedCount++;
+        }
+      }
+
+      alert(`Se han registrado ${addedCount} faltas para el día de hoy.`);
+      generateReport(); // Refresh report
+    } catch (error) {
+      console.error("Error procesando faltas:", error);
+      alert("Hubo un error al procesar las faltas.");
+    } finally {
+      setIsProcessingFaltas(false);
+    }
+  };
+
   const generateReport = async (useCurrentState = false) => {
     setIsLoading(true);
     try {
       let q;
       
       if (date) {
-        // Start and end of the selected day
-        const startDate = new Date(date);
+        // Start and end of the selected day in local time
+        const [year, month, day] = date.split('-').map(Number);
+        const startDate = new Date(year, month - 1, day);
         startDate.setHours(0, 0, 0, 0);
-        const endDate = new Date(date);
+        const endDate = new Date(year, month - 1, day);
         endDate.setHours(23, 59, 59, 999);
 
         q = query(
@@ -76,6 +137,14 @@ export default function Reports() {
       if (seccion) {
         logs = logs.filter(log => log.seccion === seccion);
       }
+      if (estado) {
+        logs = logs.filter(log => {
+          if (estado === 'A') return log.status === 'presente';
+          if (estado === 'T') return log.status === 'tarde';
+          if (estado === 'F') return log.status === 'faltante' || log.status === 'ausente';
+          return true;
+        });
+      }
 
       setReportData(logs);
     } catch (error) {
@@ -88,6 +157,13 @@ export default function Reports() {
   const downloadExcel = () => {
     if (reportData.length === 0) return;
 
+    const getStatusInitial = (status: string) => {
+      if (status === 'presente') return '(A)';
+      if (status === 'tarde') return '(T)';
+      if (status === 'faltante' || status === 'ausente') return '(F)';
+      return status;
+    };
+
     const dataToExport = reportData.map(log => ({
       'Fecha': format(log.timestamp.toDate(), 'dd/MM/yyyy'),
       'Hora': format(log.timestamp.toDate(), 'HH:mm:ss'),
@@ -96,7 +172,7 @@ export default function Reports() {
       'Grado': log.grado || '-',
       'Sección': log.seccion || '-',
       'Tipo': log.type === 'entrada' ? 'Entrada' : 'Salida',
-      'Estado': log.status
+      'Estado': getStatusInitial(log.status)
     }));
 
     const ws = XLSX.utils.json_to_sheet(dataToExport);
@@ -112,6 +188,16 @@ export default function Reports() {
           <h1 className="text-4xl font-extrabold tracking-tight text-on-surface mb-2">Reportes</h1>
           <p className="text-on-surface-variant text-lg">Genera reportes de asistencia para control interno.</p>
         </div>
+        <div>
+          <button 
+            onClick={procesarFaltas}
+            disabled={isProcessingFaltas}
+            className="px-6 py-3 bg-error text-on-error font-bold rounded-xl shadow-sm hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-sm">rule</span>
+            {isProcessingFaltas ? 'Procesando...' : 'Procesar Faltas de Hoy'}
+          </button>
+        </div>
       </div>
 
       <div className="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/20 shadow-sm">
@@ -120,7 +206,7 @@ export default function Reports() {
           Filtros de Reporte
         </h2>
         
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
           <div>
             <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Fecha (Opcional)</label>
             <input 
@@ -150,6 +236,19 @@ export default function Reports() {
             >
               <option value="">Todas las secciones</option>
               {seccionesOptions.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Estado (Opcional)</label>
+            <select 
+              value={estado}
+              onChange={(e) => setEstado(e.target.value)}
+              className="w-full bg-surface-container-highest border-0 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+            >
+              <option value="">Todos los estados</option>
+              <option value="A">(A) Temprano</option>
+              <option value="T">(T) Tardanza</option>
+              <option value="F">(F) Falto</option>
             </select>
           </div>
           <div className="flex gap-2">
@@ -194,19 +293,20 @@ export default function Reports() {
                 <th className="px-6 py-4 font-bold tracking-wider">DNI</th>
                 <th className="px-6 py-4 font-bold tracking-wider">Grado/Sección</th>
                 <th className="px-6 py-4 font-bold tracking-wider">Tipo</th>
+                <th className="px-6 py-4 font-bold tracking-wider">Estado</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/10">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-on-surface-variant">
+                  <td colSpan={7} className="px-6 py-12 text-center text-on-surface-variant">
                     <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                     Generando reporte...
                   </td>
                 </tr>
               ) : reportData.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-on-surface-variant">
+                  <td colSpan={7} className="px-6 py-12 text-center text-on-surface-variant">
                     <span className="material-symbols-outlined text-4xl mb-2 opacity-50">search_off</span>
                     <p>No se encontraron registros para los filtros seleccionados.</p>
                   </td>
@@ -239,6 +339,15 @@ export default function Reports() {
                           {log.type === 'entrada' ? 'login' : 'logout'}
                         </span>
                         {log.type}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-bold">
+                      <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full ${
+                        log.status === 'presente' ? 'bg-green-100 text-green-700' :
+                        log.status === 'tarde' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {log.status === 'presente' ? 'A' : log.status === 'tarde' ? 'T' : 'F'}
                       </span>
                     </td>
                   </tr>

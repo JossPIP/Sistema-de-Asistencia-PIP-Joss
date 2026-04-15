@@ -5,13 +5,29 @@ import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-export default function Scanner() {
+export default function Scanner({ userRole }: { userRole?: string | null }) {
   const [scanMode, setScanMode] = useState<'entrada' | 'salida'>('entrada');
   const [lastScan, setLastScan] = useState<any>(null);
   const [isScanning, setIsScanning] = useState(true);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [attendanceRules, setAttendanceRules] = useState({ lateTime: '08:30', absentTime: '10:00' });
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const fetchRules = async () => {
+      try {
+        const docRef = doc(db, 'settings', 'attendanceRules');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setAttendanceRules(docSnap.data() as any);
+        }
+      } catch (error) {
+        console.error("Error fetching rules:", error);
+      }
+    };
+    fetchRules();
+  }, []);
 
   useEffect(() => {
     if (!isScanning) return;
@@ -44,7 +60,7 @@ export default function Scanner() {
         scannerRef.current = null;
       }
     };
-  }, [isScanning, scanMode]);
+  }, [isScanning, scanMode, attendanceRules]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0 && scannerRef.current) {
@@ -114,9 +130,37 @@ export default function Scanner() {
       const studentDoc = querySnapshot.docs[0];
       const studentData = studentDoc.data();
 
-      // Determine status (simple logic: before 8:30 AM is present, after is late)
+      // Check if already scanned today (if user is a teacher)
+      if (userRole === 'teacher') {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const attendanceQ = query(
+          collection(db, 'attendance'), 
+          where('studentRef', '==', studentDoc.id),
+          where('type', '==', scanMode)
+        );
+        const attendanceSnap = await getDocs(attendanceQ);
+        
+        const alreadyScannedToday = attendanceSnap.docs.some(doc => {
+          const timestamp = doc.data().timestamp;
+          return timestamp && timestamp.toDate() >= today;
+        });
+
+        if (alreadyScannedToday) {
+          alert(`Este estudiante ya registró su ${scanMode} hoy.`);
+          if (scannerRef.current) {
+            try {
+              scannerRef.current.resume();
+            } catch (e) {}
+          }
+          return;
+        }
+      }
+
+      // Determine status using attendance rules
       const now = new Date();
-      const isLate = now.getHours() > 8 || (now.getHours() === 8 && now.getMinutes() > 30);
+      const [lateHour, lateMinute] = attendanceRules.lateTime.split(':').map(Number);
+      const isLate = now.getHours() > lateHour || (now.getHours() === lateHour && now.getMinutes() > lateMinute);
       const status = scanMode === 'entrada' ? (isLate ? 'tarde' : 'presente') : 'presente';
 
       // Log attendance
