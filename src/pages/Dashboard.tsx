@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { format, startOfWeek, startOfMonth, parseISO, isSameDay } from 'date-fns';
+import { es } from 'date-fns/locale';
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#e83e8c', '#6f42c1', '#fd7e14', '#20c997'];
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
@@ -12,6 +14,7 @@ export default function Dashboard() {
     totalLogs: 0,
   });
   const [attendanceByGrade, setAttendanceByGrade] = useState<any[]>([]);
+  const [availableGrades, setAvailableGrades] = useState<string[]>([]);
   const [attendanceByType, setAttendanceByType] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -35,41 +38,91 @@ export default function Dashboard() {
       const totalLogs = attendanceSnap.size;
 
       // Process attendance data for charts
-      const gradeCounts: Record<string, number> = {};
       let temprano = 0;
       let tardanza = 0;
       
-      // We need to track unique students who attended today to calculate absentees
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const attendedStudentIds = new Set<string>();
+      
+      // For Line Chart
+      const rawDateData: Record<string, Record<string, number>> = {};
+      const gradesSet = new Set<string>();
 
       attendanceSnap.forEach(doc => {
         const data = doc.data();
         
-        // By Grade
-        const grado = data.grado || 'Sin Grado';
-        gradeCounts[grado] = (gradeCounts[grado] || 0) + 1;
-
-        // By Type (Temprano vs Tardanza) - only counting 'entrada' for this metric
         if (data.type === 'entrada') {
           if (data.status === 'presente') temprano++;
           if (data.status === 'tarde') tardanza++;
           
-          // Check if it's today's record to calculate absentees
-          // Only count as attended if status is not 'faltante'
           if (data.timestamp && data.timestamp.toDate() >= today && data.status !== 'faltante') {
             attendedStudentIds.add(data.studentRef);
+          }
+
+          // Group by date for Line Chart
+          if (data.timestamp) {
+            const date = data.timestamp.toDate();
+            const dateString = format(date, 'yyyy-MM-dd');
+            const grado = data.grado || 'Sin Grado';
+            
+            if (!rawDateData[dateString]) {
+              rawDateData[dateString] = {};
+            }
+            rawDateData[dateString][grado] = (rawDateData[dateString][grado] || 0) + 1;
+            gradesSet.add(grado);
           }
         }
       });
 
       const faltantes = Math.max(0, totalStudents - attendedStudentIds.size);
 
-      const gradeData = Object.keys(gradeCounts).map(key => ({
-        name: key,
-        Asistencias: gradeCounts[key]
-      })).sort((a, b) => b.Asistencias - a.Asistencias);
+      // Process Line Chart Data (Dynamic Grouping)
+      const sortedDates = Object.keys(rawDateData).sort();
+      let groupedData: Record<string, Record<string, number>> = {};
+      
+      if (sortedDates.length > 30) {
+        // Group by Month
+        sortedDates.forEach(dateStr => {
+          const date = parseISO(dateStr);
+          const monthStr = format(startOfMonth(date), 'MMM yyyy', { locale: es });
+          if (!groupedData[monthStr]) groupedData[monthStr] = {};
+          
+          Object.keys(rawDateData[dateStr]).forEach(grado => {
+            groupedData[monthStr][grado] = (groupedData[monthStr][grado] || 0) + rawDateData[dateStr][grado];
+          });
+        });
+      } else if (sortedDates.length > 14) {
+        // Group by Week
+        sortedDates.forEach(dateStr => {
+          const date = parseISO(dateStr);
+          const weekStr = `Semana ${format(startOfWeek(date, { weekStartsOn: 1 }), 'dd MMM', { locale: es })}`;
+          if (!groupedData[weekStr]) groupedData[weekStr] = {};
+          
+          Object.keys(rawDateData[dateStr]).forEach(grado => {
+            groupedData[weekStr][grado] = (groupedData[weekStr][grado] || 0) + rawDateData[dateStr][grado];
+          });
+        });
+      } else {
+        // Group by Day
+        sortedDates.forEach(dateStr => {
+          const date = parseISO(dateStr);
+          const dayStr = format(date, 'dd MMM', { locale: es });
+          if (!groupedData[dayStr]) groupedData[dayStr] = {};
+          
+          Object.keys(rawDateData[dateStr]).forEach(grado => {
+            groupedData[dayStr][grado] = (groupedData[dayStr][grado] || 0) + rawDateData[dateStr][grado];
+          });
+        });
+      }
+
+      const finalLineData = Object.keys(groupedData).map(timeKey => {
+        const entry: any = { name: timeKey };
+        gradesSet.forEach(grado => {
+          entry[grado] = groupedData[timeKey][grado] || 0;
+        });
+        return entry;
+      });
 
       const typeData = [
         { name: 'Temprano', value: temprano },
@@ -78,7 +131,8 @@ export default function Dashboard() {
       ];
 
       setStats({ totalStudents, totalTeachers, totalLogs });
-      setAttendanceByGrade(gradeData);
+      setAttendanceByGrade(finalLineData);
+      setAvailableGrades(Array.from(gradesSet));
       setAttendanceByType(typeData);
     } catch (error) {
       handleFirestoreError(error, OperationType.GET, 'dashboard');
@@ -140,21 +194,30 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="bg-surface-container-lowest p-6 rounded-2xl border border-outline-variant/20 shadow-sm">
           <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary">bar_chart</span>
-            Asistencia por Grado
+            <span className="material-symbols-outlined text-primary">show_chart</span>
+            Asistencia por Grado (Evolución)
           </h3>
           <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={attendanceByGrade} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+              <LineChart data={attendanceByGrade} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" vertical={false} />
                 <XAxis dataKey="name" tick={{ fill: '#666' }} />
                 <YAxis tick={{ fill: '#666' }} />
                 <Tooltip 
-                  cursor={{ fill: 'rgba(0,0,0,0.05)' }}
                   contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                 />
-                <Bar dataKey="Asistencias" fill="#0088FE" radius={[4, 4, 0, 0]} />
-              </BarChart>
+                <Legend />
+                {availableGrades.map((grado, index) => (
+                  <Line 
+                    key={grado}
+                    type="monotone" 
+                    dataKey={grado} 
+                    stroke={COLORS[index % COLORS.length]} 
+                    strokeWidth={3}
+                    activeDot={{ r: 8 }} 
+                  />
+                ))}
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </div>

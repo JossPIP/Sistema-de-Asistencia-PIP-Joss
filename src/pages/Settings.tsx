@@ -6,6 +6,7 @@ import { db, secondaryAuth, handleFirestoreError, OperationType, logout } from '
 export default function Settings() {
   const [teachers, setTeachers] = useState<any[]>([]);
   const [newTeacher, setNewTeacher] = useState({ username: '', password: '', name: '' });
+  const [editingTeacher, setEditingTeacher] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
   
@@ -64,32 +65,53 @@ export default function Settings() {
     setMessage('');
     
     try {
-      const email = `${newTeacher.username}@digitalregistrar.app`;
-      // Create user in secondary auth instance so current admin doesn't get logged out
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, newTeacher.password);
-      
-      // Save to users collection
-      await setDoc(doc(db, 'users', userCredential.user.uid), {
-        uid: userCredential.user.uid,
-        username: newTeacher.username,
-        name: newTeacher.name,
-        role: 'teacher'
-      });
+      if (editingTeacher) {
+        // Update existing teacher in Firestore
+        await setDoc(doc(db, 'users', editingTeacher.id), {
+          ...editingTeacher,
+          username: newTeacher.username,
+          name: newTeacher.name,
+        }, { merge: true });
+        setMessage('Profesor actualizado correctamente.');
+      } else {
+        const email = `${newTeacher.username}@digitalregistrar.app`;
+        // Create user in secondary auth instance so current admin doesn't get logged out
+        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, newTeacher.password);
+        
+        // Save to users collection
+        await setDoc(doc(db, 'users', userCredential.user.uid), {
+          uid: userCredential.user.uid,
+          username: newTeacher.username,
+          name: newTeacher.name,
+          role: 'teacher'
+        });
+        setMessage('Profesor registrado correctamente.');
+      }
 
-      setMessage('Profesor registrado correctamente.');
       setNewTeacher({ username: '', password: '', name: '' });
+      setEditingTeacher(null);
       fetchTeachers();
     } catch (error: any) {
       console.error(error);
       if (error.code === 'auth/email-already-in-use') {
         setMessage('El usuario ya existe.');
       } else {
-        setMessage('Error al registrar profesor.');
+        setMessage(editingTeacher ? 'Error al actualizar profesor.' : 'Error al registrar profesor.');
       }
     } finally {
       setIsSaving(false);
       setTimeout(() => setMessage(''), 3000);
     }
+  };
+
+  const handleEditClick = (teacher: any) => {
+    setEditingTeacher(teacher);
+    setNewTeacher({ username: teacher.username, password: '', name: teacher.name });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingTeacher(null);
+    setNewTeacher({ username: '', password: '', name: '' });
   };
 
   const handleDeleteTeacher = async (uid: string) => {
@@ -174,11 +196,11 @@ export default function Settings() {
         <section className="lg:col-span-5 bg-surface-container-low rounded-xl p-6 border-0 h-fit">
           <div className="flex items-center gap-4 mb-6">
             <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-              <span className="material-symbols-outlined">person_add</span>
+              <span className="material-symbols-outlined">{editingTeacher ? 'edit' : 'person_add'}</span>
             </div>
             <div>
-              <h2 className="text-xl font-bold tracking-tight">Nuevo Profesor</h2>
-              <p className="text-sm text-on-surface-variant">Crea un acceso para escanear.</p>
+              <h2 className="text-xl font-bold tracking-tight">{editingTeacher ? 'Editar Profesor' : 'Nuevo Profesor'}</h2>
+              <p className="text-sm text-on-surface-variant">{editingTeacher ? 'Modifica los datos del acceso.' : 'Crea un acceso para escanear.'}</p>
             </div>
           </div>
 
@@ -205,18 +227,20 @@ export default function Settings() {
                 required
               />
             </div>
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Contraseña</label>
-              <input 
-                type="password" 
-                value={newTeacher.password}
-                onChange={(e) => setNewTeacher({...newTeacher, password: e.target.value})}
-                className="w-full bg-surface-container-highest border-0 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
-                placeholder="Mínimo 6 caracteres"
-                required
-                minLength={6}
-              />
-            </div>
+            {!editingTeacher && (
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Contraseña</label>
+                <input 
+                  type="password" 
+                  value={newTeacher.password}
+                  onChange={(e) => setNewTeacher({...newTeacher, password: e.target.value})}
+                  className="w-full bg-surface-container-highest border-0 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                  placeholder="Mínimo 6 caracteres"
+                  required
+                  minLength={6}
+                />
+              </div>
+            )}
             
             {message && (
               <div className="p-3 bg-primary-container text-on-primary-container rounded-lg text-sm font-medium">
@@ -224,14 +248,25 @@ export default function Settings() {
               </div>
             )}
 
-            <button 
-              type="submit"
-              disabled={isSaving}
-              className="w-full py-3 cta-gradient text-on-primary font-semibold rounded-xl shadow-sm hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 mt-4"
-            >
-              <span className="material-symbols-outlined text-sm">add</span>
-              {isSaving ? 'Registrando...' : 'Registrar Profesor'}
-            </button>
+            <div className="flex gap-2 mt-4">
+              <button 
+                type="submit"
+                disabled={isSaving}
+                className="flex-1 py-3 cta-gradient text-on-primary font-semibold rounded-xl shadow-sm hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-sm">{editingTeacher ? 'save' : 'add'}</span>
+                {isSaving ? (editingTeacher ? 'Guardando...' : 'Registrando...') : (editingTeacher ? 'Guardar Cambios' : 'Registrar Profesor')}
+              </button>
+              {editingTeacher && (
+                <button 
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="px-4 py-3 bg-surface-container-highest text-on-surface-variant font-semibold rounded-xl shadow-sm hover:bg-surface-variant transition-all flex items-center justify-center"
+                >
+                  <span className="material-symbols-outlined text-sm">close</span>
+                </button>
+              )}
+            </div>
           </form>
         </section>
 
@@ -262,13 +297,22 @@ export default function Settings() {
                         <p className="text-xs text-on-surface-variant font-mono">Usuario: {teacher.username}</p>
                       </div>
                     </div>
-                    <button 
-                      onClick={() => handleDeleteTeacher(teacher.id)}
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-error hover:bg-error/10 transition-colors"
-                      title="Eliminar acceso"
-                    >
-                      <span className="material-symbols-outlined text-sm">delete</span>
-                    </button>
+                    <div className="flex gap-1">
+                      <button 
+                        onClick={() => handleEditClick(teacher)}
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-primary hover:bg-primary/10 transition-colors"
+                        title="Editar acceso"
+                      >
+                        <span className="material-symbols-outlined text-sm">edit</span>
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteTeacher(teacher.id)}
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-error hover:bg-error/10 transition-colors"
+                        title="Eliminar acceso"
+                      >
+                        <span className="material-symbols-outlined text-sm">delete</span>
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
