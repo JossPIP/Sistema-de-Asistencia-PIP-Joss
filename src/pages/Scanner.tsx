@@ -142,31 +142,43 @@ export default function Scanner({ userRole }: { userRole?: string | null }) {
       const studentDoc = querySnapshot.docs[0];
       const studentData = studentDoc.data();
 
-      // Check if already scanned today (if user is a teacher)
-      if (userRole === 'teacher') {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const attendanceQ = query(
-          collection(db, 'attendance'), 
-          where('studentRef', '==', studentDoc.id),
-          where('type', '==', scanModeRef.current)
-        );
-        const attendanceSnap = await getDocs(attendanceQ);
-        
-        const alreadyScannedToday = attendanceSnap.docs.some(doc => {
-          const timestamp = doc.data().timestamp;
-          return timestamp && timestamp.toDate() >= today;
-        });
+      // Check if already scanned today by the current user (per-user limit)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const attendanceQ = query(
+        collection(db, 'attendance'), 
+        where('studentRef', '==', studentDoc.id),
+        where('type', '==', scanModeRef.current),
+        where('uid', '==', auth.currentUser.uid)
+      );
+      const attendanceSnap = await getDocs(attendanceQ);
+      
+      const alreadyScannedToday = attendanceSnap.docs.some(doc => {
+        const timestamp = doc.data().timestamp;
+        return timestamp && timestamp.toDate() >= today;
+      });
 
-        if (alreadyScannedToday) {
-          alert(`Este estudiante ya registró su ${scanModeRef.current} hoy.`);
-          if (scannerRef.current) {
-            try {
-              scannerRef.current.resume();
-            } catch (e) {}
-          }
-          return;
+      if (alreadyScannedToday) {
+        alert(`Ya registraste la ${scanModeRef.current} de este estudiante hoy.`);
+        if (scannerRef.current) {
+          try {
+            scannerRef.current.resume();
+          } catch (e) {}
         }
+        return;
+      }
+
+      // Fetch current user info for the log
+      let registrarName = 'Desconocido';
+      let registrarRole = userRole || 'Desconocido';
+      try {
+        const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+        if (userDoc.exists()) {
+          registrarName = userDoc.data().name || userDoc.data().username || 'Desconocido';
+          registrarRole = userDoc.data().role || registrarRole;
+        }
+      } catch (e) {
+        console.warn("Could not fetch user details", e);
       }
 
       // Determine status using attendance rules
@@ -186,7 +198,9 @@ export default function Scanner({ userRole }: { userRole?: string | null }) {
         avatarUrl: studentData.avatarUrl || null,
         timestamp: serverTimestamp(),
         type: scanModeRef.current,
-        status: status
+        status: status,
+        registrarName: registrarName,
+        registrarRole: registrarRole
       });
 
       // Intentar enviar WhatsApp (sin await para no bloquear el escáner)

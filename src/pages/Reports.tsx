@@ -10,6 +10,7 @@ export default function Reports() {
   const [grado, setGrado] = useState('');
   const [seccion, setSeccion] = useState('');
   const [estado, setEstado] = useState('');
+  const [registrarRole, setRegistrarRole] = useState('');
   const [reportData, setReportData] = useState<any[]>([]);
   const [visibleCount, setVisibleCount] = useState(20);
   const [isLoading, setIsLoading] = useState(false);
@@ -146,6 +147,9 @@ export default function Reports() {
           return true;
         });
       }
+      if (registrarRole) {
+        logs = logs.filter(log => log.registrarRole === registrarRole);
+      }
 
       setReportData(logs);
       setVisibleCount(20);
@@ -174,7 +178,9 @@ export default function Reports() {
       'Grado': log.grado || '-',
       'Sección': log.seccion || '-',
       'Tipo': log.type === 'entrada' ? 'Entrada' : 'Salida',
-      'Estado': getStatusInitial(log.status)
+      'Estado': getStatusInitial(log.status),
+      'Registrado Por': log.registrarName || 'Desconocido',
+      'Rol': log.registrarRole === 'admin' ? 'Administrador' : (log.registrarRole === 'teacher' ? 'Profesor' : 'Desconocido')
     }));
 
     const ws = XLSX.utils.json_to_sheet(dataToExport);
@@ -208,9 +214,9 @@ export default function Reports() {
           Filtros de Reporte
         </h2>
         
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
           <div>
-            <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Fecha (Opcional)</label>
+            <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Fecha</label>
             <input 
               type="date" 
               value={date}
@@ -219,38 +225,50 @@ export default function Reports() {
             />
           </div>
           <div>
-            <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Grado (Opcional)</label>
+            <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Grado</label>
             <select 
               value={grado}
               onChange={(e) => setGrado(e.target.value)}
               className="w-full bg-surface-container-highest border-0 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
             >
-              <option value="">Todos los grados</option>
+              <option value="">Todos</option>
               {gradosOptions.map(g => <option key={g} value={g}>{g}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Sección (Opcional)</label>
+            <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Sección</label>
             <select 
               value={seccion}
               onChange={(e) => setSeccion(e.target.value)}
               className="w-full bg-surface-container-highest border-0 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
             >
-              <option value="">Todas las secciones</option>
+              <option value="">Todas</option>
               {seccionesOptions.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Estado (Opcional)</label>
+            <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Estado</label>
             <select 
               value={estado}
               onChange={(e) => setEstado(e.target.value)}
               className="w-full bg-surface-container-highest border-0 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
             >
-              <option value="">Todos los estados</option>
+              <option value="">Todos</option>
               <option value="A">(A) Temprano</option>
               <option value="T">(T) Tardanza</option>
               <option value="F">(F) Falto</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Registrado Por</label>
+            <select 
+              value={registrarRole}
+              onChange={(e) => setRegistrarRole(e.target.value)}
+              className="w-full bg-surface-container-highest border-0 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+            >
+              <option value="">Todos</option>
+              <option value="admin">Administrador</option>
+              <option value="teacher">Profesor</option>
             </select>
           </div>
           <div className="flex gap-2">
@@ -296,19 +314,20 @@ export default function Reports() {
                 <th className="px-6 py-4 font-bold tracking-wider">Grado/Sección</th>
                 <th className="px-6 py-4 font-bold tracking-wider">Tipo</th>
                 <th className="px-6 py-4 font-bold tracking-wider">Estado</th>
+                <th className="px-6 py-4 font-bold tracking-wider">Registrado Por</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/10">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-on-surface-variant">
+                  <td colSpan={8} className="px-6 py-12 text-center text-on-surface-variant">
                     <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                     Generando reporte...
                   </td>
                 </tr>
               ) : reportData.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-on-surface-variant">
+                  <td colSpan={8} className="px-6 py-12 text-center text-on-surface-variant">
                     <span className="material-symbols-outlined text-4xl mb-2 opacity-50">search_off</span>
                     <p>No se encontraron registros para los filtros seleccionados.</p>
                   </td>
@@ -351,6 +370,14 @@ export default function Reports() {
                       }`}>
                         {log.status === 'presente' ? 'A' : log.status === 'tarde' ? 'T' : 'F'}
                       </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className="font-medium text-on-surface">{log.registrarName || 'Desconocido'}</span>
+                        <span className="text-[10px] text-on-surface-variant uppercase tracking-wider">
+                          {log.registrarRole === 'admin' ? 'Administrador' : (log.registrarRole === 'teacher' ? 'Profesor' : 'Desconocido')}
+                        </span>
+                      </div>
                     </td>
                   </tr>
                 ))

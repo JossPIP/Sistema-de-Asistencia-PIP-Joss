@@ -60,7 +60,7 @@ service cloud.firestore {
     }
 
     function isValidAttendanceLog(data) {
-      let allowedFields = ['uid', 'studentRef', 'studentName', 'studentDni', 'grado', 'seccion', 'avatarUrl', 'timestamp', 'type', 'status'];
+      let allowedFields = ['uid', 'studentRef', 'studentName', 'studentDni', 'grado', 'seccion', 'avatarUrl', 'timestamp', 'type', 'status', 'registrarName', 'registrarRole'];
       return hasOnlyAllowedFields(allowedFields) &&
              hasRequiredFields(['uid', 'studentRef', 'studentName', 'studentDni', 'timestamp', 'type', 'status']) &&
              data.uid is string && data.uid.size() > 0 && data.uid.size() < 128 &&
@@ -70,9 +70,11 @@ service cloud.firestore {
              (!('grado' in data) || (data.grado is string && data.grado.size() < 50)) &&
              (!('seccion' in data) || (data.seccion is string && data.seccion.size() < 50)) &&
              (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() < 500)) &&
+             (!('registrarName' in data) || (data.registrarName is string && data.registrarName.size() < 200)) &&
+             (!('registrarRole' in data) || (data.registrarRole is string && data.registrarRole.size() < 50)) &&
              data.timestamp is timestamp &&
              data.type in ['entrada', 'salida'] &&
-             data.status in ['presente', 'tarde', 'ausente'];
+             data.status in ['presente', 'tarde', 'ausente', 'faltante'];
     }
 
     function isValidSettings(data) {
