@@ -12,50 +12,48 @@ const secondaryApp = initializeApp(firebaseConfig, "Secondary");
 export const secondaryAuth = getAuth(secondaryApp);
 
 export const loginWithCredentials = async (username: string, password: string) => {
-  // Usamos un dominio ficticio para adaptar el "usuario" al sistema de correos de Firebase
-  const email = `${username}@digitalregistrar.app`;
+  const cleanUsername = username.trim();
+  const email = `${cleanUsername}@digitalregistrar.app`;
+  let userCredential;
+  
   try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    
-    // Check if user document exists, if not, create it (for the initial admin)
+    userCredential = await signInWithEmailAndPassword(auth, email, password);
+  } catch (error: any) {
+    // Si es el administrador por defecto y no existe, lo creamos automáticamente la primera vez
+    if ((cleanUsername === '41916759' && password === 'Joysse1809@') || cleanUsername === 'admin') {
+      try {
+        userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      } catch (createError) {
+        throw error; // Lanza el error original de signIn
+      }
+    } else {
+      throw error;
+    }
+  }
+
+  // Una vez autenticado, verificamos/creamos el documento en Firestore
+  try {
     const userDocRef = doc(db, 'users', userCredential.user.uid);
     const userDocSnap = await getDoc(userDocRef);
     
     if (!userDocSnap.exists()) {
-      if (username === '41916759') {
-        await setDoc(userDocRef, {
-          uid: userCredential.user.uid,
-          username: username,
-          role: 'admin',
-          name: 'Administrador Principal'
-        });
-      } else {
-        await setDoc(userDocRef, {
-          uid: userCredential.user.uid,
-          username: username,
-          role: 'teacher',
-          name: 'Profesor'
-        });
-      }
+      const role = (cleanUsername === '41916759' || cleanUsername === 'admin') ? 'admin' : 'teacher';
+      const name = role === 'admin' ? 'Administrador Principal' : 'Profesor';
+      
+      await setDoc(userDocRef, {
+        uid: userCredential.user.uid,
+        username: cleanUsername,
+        role: role,
+        name: name
+      });
     }
     return userCredential;
-  } catch (error: any) {
-    // Si es el administrador por defecto y no existe, lo creamos automáticamente la primera vez
-    if (username === '41916759' && password === 'Joysse1809@') {
-      try {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        await setDoc(doc(db, 'users', userCredential.user.uid), {
-          uid: userCredential.user.uid,
-          username: username,
-          role: 'admin',
-          name: 'Administrador Principal'
-        });
-        return userCredential;
-      } catch (createError) {
-        throw error;
-      }
+  } catch (firestoreError: any) {
+    console.error("Error de Firestore al iniciar sesión:", firestoreError);
+    if (firestoreError.message?.toLowerCase().includes('offline')) {
+      throw new Error('No se pudo conectar a la base de datos (Cliente offline). Verifica tu conexión o la cuota de Firebase.');
     }
-    throw error;
+    throw new Error(`Error de base de datos: ${firestoreError.message}`);
   }
 };
 

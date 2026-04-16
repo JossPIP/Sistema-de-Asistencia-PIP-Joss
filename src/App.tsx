@@ -15,6 +15,7 @@ export default function App() {
   const [user, setUser] = useState<any>(auth.currentUser);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [globalError, setGlobalError] = useState('');
   
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -31,12 +32,14 @@ export default function App() {
           if (userDoc.exists()) {
             setUserRole(userDoc.data().role);
             setIsLoggingIn(false);
+            setGlobalError('');
           } else {
             setUserRole(null);
           }
           setLoading(false);
         }, (error) => {
           console.error("Error fetching user role:", error);
+          setGlobalError('Error al conectar con la base de datos. Es posible que se haya excedido la cuota de Firebase o no haya internet.');
           setLoading(false);
           setIsLoggingIn(false);
         });
@@ -64,19 +67,43 @@ export default function App() {
       console.error(error);
       if (error.code === 'auth/operation-not-allowed') {
         setLoginError('El inicio de sesión por correo/contraseña no está habilitado en Firebase.');
-      } else {
+      } else if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
         setLoginError('Usuario o contraseña incorrectos.');
+      } else if (error.code === 'auth/network-request-failed') {
+        setLoginError('Error de red. Verifica tu conexión a internet.');
+      } else {
+        setLoginError(error.message || 'Ocurrió un error al iniciar sesión.');
       }
       setIsLoggingIn(false);
     }
   };
 
   useEffect(() => {
-    if (!loading && user && !userRole && !isLoggingIn) {
+    if (!loading && user && !userRole && !isLoggingIn && !globalError) {
       console.warn("User has no role document, signing out.");
       signOut(auth);
     }
-  }, [loading, user, userRole, isLoggingIn]);
+  }, [loading, user, userRole, isLoggingIn, globalError]);
+
+  if (globalError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface p-6">
+        <div className="bg-error-container text-on-error-container p-8 rounded-3xl shadow-lg max-w-md text-center border border-error/20">
+          <span className="material-symbols-outlined text-5xl mb-4">cloud_off</span>
+          <h2 className="text-xl font-bold mb-2">Error de Conexión</h2>
+          <p className="mb-6 opacity-90">{globalError}</p>
+          <div className="flex gap-3 justify-center">
+            <button onClick={() => window.location.reload()} className="px-6 py-2 bg-error text-on-error rounded-xl font-bold hover:opacity-90 transition-opacity">
+              Reintentar
+            </button>
+            <button onClick={() => { setGlobalError(''); signOut(auth); }} className="px-6 py-2 bg-surface text-on-surface border border-outline-variant rounded-xl font-bold hover:bg-surface-container transition-colors">
+              Cerrar Sesión
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading || (user && !userRole)) {
     return (

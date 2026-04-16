@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, getDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, addDoc, serverTimestamp, getDoc, doc, limit } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -119,13 +119,15 @@ export default function Reports() {
           collection(db, 'attendance'),
           where('timestamp', '>=', startDate),
           where('timestamp', '<=', endDate),
-          orderBy('timestamp', 'desc')
+          orderBy('timestamp', 'desc'),
+          limit(1000)
         );
       } else {
         // No date filter, get all records ordered by timestamp
         q = query(
           collection(db, 'attendance'),
-          orderBy('timestamp', 'desc')
+          orderBy('timestamp', 'desc'),
+          limit(1000)
         );
       }
 

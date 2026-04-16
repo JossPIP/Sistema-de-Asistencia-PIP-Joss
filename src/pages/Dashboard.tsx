@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, getDocs } from 'firebase/firestore';
+import { collection, query, getDocs, getCountFromServer, where } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { format, startOfWeek, startOfMonth, parseISO, isSameDay } from 'date-fns';
@@ -25,17 +25,22 @@ export default function Dashboard() {
   const fetchDashboardData = async () => {
     setIsLoading(true);
     try {
-      // Fetch students
-      const studentsSnap = await getDocs(collection(db, 'students'));
-      const totalStudents = studentsSnap.size;
+      // Fetch attendance logs for charts (only last 30 days to prevent slow loading)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      thirtyDaysAgo.setHours(0, 0, 0, 0);
 
-      // Fetch teachers
-      const usersSnap = await getDocs(query(collection(db, 'users')));
-      const totalTeachers = usersSnap.docs.filter(doc => doc.data().role === 'teacher').length;
+      // Fetch totals and attendance data in parallel for performance
+      const [studentsCountSnap, teachersCountSnap, logsCountSnap, attendanceSnap] = await Promise.all([
+        getCountFromServer(collection(db, 'students')),
+        getCountFromServer(query(collection(db, 'users'), where('role', '==', 'teacher'))),
+        getCountFromServer(collection(db, 'attendance')),
+        getDocs(query(collection(db, 'attendance'), where('timestamp', '>=', thirtyDaysAgo)))
+      ]);
 
-      // Fetch attendance logs
-      const attendanceSnap = await getDocs(collection(db, 'attendance'));
-      const totalLogs = attendanceSnap.size;
+      const totalStudents = studentsCountSnap.data().count;
+      const totalTeachers = teachersCountSnap.data().count;
+      const totalLogs = logsCountSnap.data().count;
 
       // Process attendance data for charts
       let temprano = 0;
@@ -53,14 +58,16 @@ export default function Dashboard() {
         const data = doc.data();
         
         if (data.type === 'entrada') {
-          if (data.status === 'presente') temprano++;
-          if (data.status === 'tarde') tardanza++;
-          
-          if (data.timestamp && data.timestamp.toDate() >= today && data.status !== 'faltante') {
-            attendedStudentIds.add(data.studentRef);
+          // Only count today's stats for the pie chart
+          if (data.timestamp && data.timestamp.toDate() >= today) {
+            if (data.status === 'presente') temprano++;
+            if (data.status === 'tarde') tardanza++;
+            if (data.status !== 'faltante') {
+              attendedStudentIds.add(data.studentRef);
+            }
           }
 
-          // Group by date for Line Chart
+          // Group by date for Line Chart (last 30 days)
           if (data.timestamp) {
             const date = data.timestamp.toDate();
             const dateString = format(date, 'yyyy-MM-dd');
@@ -81,18 +88,7 @@ export default function Dashboard() {
       const sortedDates = Object.keys(rawDateData).sort();
       let groupedData: Record<string, Record<string, number>> = {};
       
-      if (sortedDates.length > 30) {
-        // Group by Month
-        sortedDates.forEach(dateStr => {
-          const date = parseISO(dateStr);
-          const monthStr = format(startOfMonth(date), 'MMM yyyy', { locale: es });
-          if (!groupedData[monthStr]) groupedData[monthStr] = {};
-          
-          Object.keys(rawDateData[dateStr]).forEach(grado => {
-            groupedData[monthStr][grado] = (groupedData[monthStr][grado] || 0) + rawDateData[dateStr][grado];
-          });
-        });
-      } else if (sortedDates.length > 14) {
+      if (sortedDates.length > 14) {
         // Group by Week
         sortedDates.forEach(dateStr => {
           const date = parseISO(dateStr);
