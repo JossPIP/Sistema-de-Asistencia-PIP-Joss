@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -11,12 +11,14 @@ export default function Scanner({ userRole }: { userRole?: string | null }) {
   const [isScanning, setIsScanning] = useState(true);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [attendanceRules, setAttendanceRules] = useState({ lateTime: '08:30', absentTime: '10:00' });
+  
+  // Local caches to speed up scan processing
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // Refs to avoid restarting the camera when state changes
   const scanModeRef = useRef(scanMode);
   const attendanceRulesRef = useRef(attendanceRules);
+  const myScansTodayRef = useRef<Set<string>>(new Set());
+  const registrarNameRef = useRef<string>('Desconocido');
 
   useEffect(() => {
     scanModeRef.current = scanMode;
@@ -39,6 +41,36 @@ export default function Scanner({ userRole }: { userRole?: string | null }) {
       }
     };
     fetchRules();
+
+    if (auth.currentUser) {
+      // Fetch user name once to cache it
+      getDoc(doc(db, 'users', auth.currentUser.uid)).then(userDoc => {
+        if (userDoc.exists()) {
+          registrarNameRef.current = userDoc.data().name || userDoc.data().username || 'Desconocido';
+        }
+      }).catch(console.error);
+
+      // Subscribe to today's attendance logs for THIS user to prevent duplicate scans (client-side O(1) check)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const q = query(
+        collection(db, 'attendance'),
+        where('uid', '==', auth.currentUser.uid),
+        where('timestamp', '>=', today)
+      );
+      
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const newSet = new Set<string>();
+        snapshot.forEach(doc => {
+          const type = doc.data().type;
+          const studentRef = doc.data().studentRef;
+          newSet.add(`${studentRef}_${type}`);
+        });
+        myScansTodayRef.current = newSet;
+      });
+
+      return () => unsubscribe();
+    }
   }, []);
 
   useEffect(() => {
@@ -72,7 +104,8 @@ export default function Scanner({ userRole }: { userRole?: string | null }) {
         scannerRef.current = null;
       }
     };
-  }, [isScanning]); // Removed scanMode and attendanceRules from dependencies
+  }, [isScanning]); // Removed scanMode from dependencies
+
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0 && scannerRef.current) {
@@ -142,23 +175,9 @@ export default function Scanner({ userRole }: { userRole?: string | null }) {
       const studentDoc = querySnapshot.docs[0];
       const studentData = studentDoc.data();
 
-      // Check if already scanned today by the current user (per-user limit)
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const attendanceQ = query(
-        collection(db, 'attendance'), 
-        where('studentRef', '==', studentDoc.id),
-        where('type', '==', scanModeRef.current),
-        where('uid', '==', auth.currentUser.uid)
-      );
-      const attendanceSnap = await getDocs(attendanceQ);
-      
-      const alreadyScannedToday = attendanceSnap.docs.some(doc => {
-        const timestamp = doc.data().timestamp;
-        return timestamp && timestamp.toDate() >= today;
-      });
-
-      if (alreadyScannedToday) {
+      // Check if already scanned today by the current user (using our local O(1) cache!)
+      const cacheKey = `${studentDoc.id}_${scanModeRef.current}`;
+      if (myScansTodayRef.current.has(cacheKey)) {
         alert(`Ya registraste la ${scanModeRef.current} de este estudiante hoy.`);
         if (scannerRef.current) {
           try {
@@ -168,18 +187,9 @@ export default function Scanner({ userRole }: { userRole?: string | null }) {
         return;
       }
 
-      // Fetch current user info for the log
-      let registrarName = 'Desconocido';
+      // We already fetched registrarName on mount
+      let registrarName = registrarNameRef.current;
       let registrarRole = userRole || 'Desconocido';
-      try {
-        const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-        if (userDoc.exists()) {
-          registrarName = userDoc.data().name || userDoc.data().username || 'Desconocido';
-          registrarRole = userDoc.data().role || registrarRole;
-        }
-      } catch (e) {
-        console.warn("Could not fetch user details", e);
-      }
 
       // Determine status using attendance rules
       const now = new Date();

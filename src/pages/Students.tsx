@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, query, onSnapshot, addDoc, serverTimestamp, writeBatch, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, addDoc, serverTimestamp, writeBatch, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import * as XLSX from 'xlsx';
 
@@ -9,6 +9,8 @@ export default function Students() {
   const [isAdding, setIsAdding] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editFormData, setEditFormData] = useState<any>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [newStudent, setNewStudent] = useState({
@@ -29,7 +31,6 @@ export default function Students() {
     const q = query(collection(db, 'students'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const studentData = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
-      // Filtrar localmente por el usuario actual (o se podría hacer en la query)
       const myStudents = studentData.filter(s => s.uid === auth.currentUser?.uid);
       setStudents(myStudents);
     }, (error) => {
@@ -55,6 +56,41 @@ export default function Students() {
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'students');
     }
+  };
+
+  const startEditing = (student: any) => {
+    setEditingId(student.id);
+    setEditFormData({
+      dni: student.dni || '',
+      apellidoPaterno: student.apellidoPaterno || '',
+      apellidoMaterno: student.apellidoMaterno || '',
+      nombres: student.nombres || '',
+      grado: student.grado || '',
+      seccion: student.seccion || '',
+      celular: student.celular || '',
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingId) return;
+    try {
+      await updateDoc(doc(db, 'students', editingId), {
+        dni: editFormData.dni,
+        apellidoPaterno: editFormData.apellidoPaterno,
+        apellidoMaterno: editFormData.apellidoMaterno,
+        nombres: editFormData.nombres,
+        grado: editFormData.grado,
+        seccion: editFormData.seccion,
+        celular: editFormData.celular,
+      });
+      setEditingId(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'students');
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
   };
 
   const handleDownloadTemplate = () => {
@@ -340,35 +376,69 @@ export default function Students() {
                         className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer"
                       />
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-full bg-secondary-container overflow-hidden shrink-0">
-                          <img src={student.avatarUrl} alt={student.nombres} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                        </div>
-                        <div>
-                          <p className="font-bold text-on-surface">{student.apellidoPaterno} {student.apellidoMaterno}, {student.nombres}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-on-surface-variant font-mono">
-                      {student.dni}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="px-2.5 py-1 bg-surface-container-highest rounded-md text-xs font-medium text-on-surface-variant whitespace-nowrap">
-                        {student.grado} - {student.seccion}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <a 
-                        href={`https://wa.me/${student.celular.replace(/\D/g, '')}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 rounded-lg transition-colors text-sm font-semibold"
-                      >
-                        <span className="material-symbols-outlined text-sm">chat</span>
-                        WhatsApp
-                      </a>
-                    </td>
+                    {editingId === student.id ? (
+                      <>
+                        <td className="px-6 py-4">
+                          <div className="flex gap-2 mb-2">
+                            <input value={editFormData.nombres} onChange={e => setEditFormData({...editFormData, nombres: e.target.value})} className="bg-surface-container-highest border text-sm border-outline-variant/30 rounded px-2 py-1 w-1/3" placeholder="Nombres" />
+                            <input value={editFormData.apellidoPaterno} onChange={e => setEditFormData({...editFormData, apellidoPaterno: e.target.value})} className="bg-surface-container-highest border text-sm border-outline-variant/30 rounded px-2 py-1 w-1/3" placeholder="Paterno" />
+                            <input value={editFormData.apellidoMaterno} onChange={e => setEditFormData({...editFormData, apellidoMaterno: e.target.value})} className="bg-surface-container-highest border text-sm border-outline-variant/30 rounded px-2 py-1 w-1/3" placeholder="Materno" />
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm font-mono">
+                          <input value={editFormData.dni} onChange={e => setEditFormData({...editFormData, dni: e.target.value})} className="bg-surface-container-highest border border-outline-variant/30 rounded px-2 py-1 w-full" placeholder="DNI" />
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex gap-2">
+                            <input value={editFormData.grado} onChange={e => setEditFormData({...editFormData, grado: e.target.value})} className="bg-surface-container-highest border text-sm border-outline-variant/30 rounded px-2 py-1 w-1/2" placeholder="Grado" />
+                            <input value={editFormData.seccion} onChange={e => setEditFormData({...editFormData, seccion: e.target.value})} className="bg-surface-container-highest border text-sm border-outline-variant/30 rounded px-2 py-1 w-1/2" placeholder="Sección" />
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-right flex flex-col gap-2 relative">
+                          <input value={editFormData.celular} onChange={e => setEditFormData({...editFormData, celular: e.target.value})} className="bg-surface-container-highest border text-sm border-outline-variant/30 rounded px-2 py-1 w-full" placeholder="Celular" />
+                          <div className="flex justify-end gap-2 mt-2">
+                            <button onClick={handleSaveEdit} className="p-1 bg-primary text-on-primary rounded hover:opacity-90">
+                              <span className="material-symbols-outlined text-sm">check</span>
+                            </button>
+                            <button onClick={handleCancelEdit} className="p-1 bg-surface-container-high text-on-surface rounded hover:bg-surface-variant">
+                              <span className="material-symbols-outlined text-sm">close</span>
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-secondary-container overflow-hidden shrink-0 cursor-pointer" onClick={() => startEditing(student)}>
+                              <img src={student.avatarUrl} alt={student.nombres} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            </div>
+                            <div>
+                              <p className="text-sm text-on-surface cursor-pointer hover:text-primary transition-colors" onClick={() => startEditing(student)}>{student.apellidoPaterno} {student.apellidoMaterno}, {student.nombres}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-on-surface-variant font-mono cursor-pointer" onClick={() => startEditing(student)}>
+                          {student.dni}
+                        </td>
+                        <td className="px-6 py-4 cursor-pointer" onClick={() => startEditing(student)}>
+                          <span className="px-2.5 py-1 bg-surface-container-highest rounded-md text-xs font-medium text-on-surface-variant whitespace-nowrap">
+                            {student.grado} - {student.seccion}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right cursor-pointer">
+                          <a 
+                            href={`https://wa.me/${student.celular.replace(/\D/g, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 rounded-lg transition-colors text-sm font-semibold"
+                          >
+                            <span className="material-symbols-outlined text-sm">chat</span>
+                            WhatsApp
+                          </a>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))
               )}
